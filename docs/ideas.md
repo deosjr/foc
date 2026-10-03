@@ -4,6 +4,19 @@ A brainstorm of features for Fog of Command, each grounded in how real
 commanders dealt with slow, lossy and biased information. Sources were checked
 on 3 October 2026; links point to readable translations or summaries.
 
+Several ideas draw on Bret Devereaux's series *Total Generalship: Commanding
+Pre-Modern Armies* on A Collection of Unmitigated Pedantry:
+[I: Reports](https://acoup.blog/2022/05/27/collections-total-generalship-commanding-pre-modern-armies-part-i-reports/),
+[II: Commands](https://acoup.blog/2022/06/03/collections-total-generalship-commanding-pre-modern-armies-part-ii-commands/),
+[IIIa: Discipline](https://acoup.blog/2022/06/17/collections-total-generalship-commanding-pre-modern-armies-part-iiia-discipline/),
+[IIIb: Officers](https://acoup.blog/2022/06/24/collections-total-generalship-commanding-pre-modern-armies-part-iiib-officers/),
+[IIIc: Morale and Cohesion](https://acoup.blog/2022/07/01/collections-total-generalship-commanding-pre-modern-armies-part-iiic-morale-and-cohesion/).
+Much of the series concerns the battlefield itself, below this game's scale;
+what carries over is listed under "From *Total Generalship*" and folded into
+the ideas above it. Its central claim fits the game's premise: the
+constraints that defined ancient command are exactly the ones strategy games
+usually remove for playability.
+
 The game already has the core of it: couriers with delay, interception,
 generals who misread by temperament, distorted and incomplete reports,
 conditional orders, and a review that shows the truth afterwards. The ideas
@@ -14,7 +27,9 @@ when the letters stop making sense).
 ## Recommended next steps
 
 These fit the existing pipeline with modest work, and each adds a real
-decision for the player rather than more noise.
+decision for the player rather than more noise. Of the ideas taken from
+*Total Generalship* below, "Silence is not safety" is the cheapest and
+"Offering and refusing battle" the most promising; both could join this list.
 
 ### 1. Beacon signals: fast but mute
 
@@ -31,7 +46,10 @@ be seen by the enemy, and a beacon hill can be taken.
 
 **Why it's interesting.** It forces the speed-versus-expressiveness trade-off
 that defined ancient signalling, and it pairs naturally with conditional
-orders ("if you see the fire on Duna Hills, march").
+orders ("if you see the fire on Duna Hills, march"). Devereaux (Part II) makes
+the same point about trumpets and standards: they carried only a handful of
+prearranged signals, and signal chains were an operational tool, not a
+battlefield one, which is the scale this game plays at.
 
 ### 2. Send it twice, by different roads
 
@@ -103,8 +121,12 @@ ciphered orders drift toward the ambiguous branch.
 **Relay stations.** Herodotus (8.98) describes the Persian *angareion*: one
 man and one horse per day's stage, handing the message on like a torch race.
 ([Herodotus 8.98](https://scaife.perseus.org/reader/urn:cts:greekLit:tlg0016.tlg001.perseus-eng2:8.98.1))
+Devereaux (Part I) draws the contrast that matters: official messengers on
+pre-arranged routes could cover over a hundred miles a day, while most news
+travelled at the pace of traders and armies.
 *Mechanic:* an army that rests a turn on a road can leave a relay post that
-halves courier delay through it, until the enemy burns it.
+halves courier delay through it, until the enemy burns it. Off the relay
+roads, letters keep the current slower pace.
 
 **Readback.** At Balaclava, Raglan could see the guns he meant and Lucan could
 not. When Lucan asked which guns, Captain Nolan swept his arm toward the
@@ -126,9 +148,14 @@ contradictory; even more are false, and most are uncertain" (*On War* I.6).
 ([Clausewitz quotations](https://clausewitz.com/readings/Cquotations.htm))
 Sun Tzu's five kinds of spies include the *doomed* spy, sent with false news
 to be caught (ch. 13). ([Sun Tzu 13](https://standardebooks.org/ebooks/sun-tzu/the-art-of-war/lionel-giles/text/chapter-13))
-*Mechanic:* merchants, deserters and spies as cheap, noisy extra reports; the
-player must weigh them against the generals' letters. Pencilled guesses on the
-map (an open question in the spec) make the weighing visible.
+Devereaux (Part I) lists the sources a general actually had: his own cavalry
+scouts (reliable but short-ranged), traders on the roads, friendly locals and
+political dissidents, deserters and prisoners. Reports were very often
+wrong, and deliberate disinformation was ordinary practice.
+*Mechanic:* merchants, locals, deserters and spies as cheap, noisy extra
+reports, each with its own reliability and speed (rumour moves at a trader's
+pace); the player must weigh them against the generals' letters. Pencilled
+guesses on the map (an open question in the spec) make the weighing visible.
 
 **The enemy deceives too.** At the Teutoburg Forest, a real revolt among
 distant tribes was started on purpose to draw Varus out, while Arminius stayed
@@ -155,6 +182,104 @@ took effect only on ratification, and the news had not arrived.
 *Mechanic:* a truce scenario: the enemy offers terms, and the player's letters
 accepting them must reach every general before someone fights on.
 
+## From *Total Generalship*
+
+### Silence is not safety
+
+**Source.** Part I stresses that the absence of reports did not mean a region
+was safe, only that the general was blind there, and that he never knew
+whether his picture was complete.
+
+**Mechanic.** The believed map should tell the two apart. Today a province
+with no enemy marked looks the same whether a general saw it empty last turn
+or nobody has looked for ten turns; the "T5" badge is easy to miss. Shade
+never-seen and long-unseen provinces as unknown, and show "seen clear, T5"
+explicitly. This is small, sits entirely in the web layer, and makes the fog
+legible rather than just present.
+
+### Mistaking a detachment for an army
+
+**Source.** At Delium (424 BC) Athenians took a cavalry detachment for a
+second army and broke (Thucydides 4.96); at Tifernum (297 BC) Fabius made his
+infantry appear as a fresh army to panic the enemy (Livy 10.14). Part I notes
+that overall size was the one thing that was hard to hide, while details were
+easy to get wrong.
+
+**Mechanic.** Keep the size noise as it is, but add occasional gross errors
+in *what* was seen: a small force reported as a host, two armies merged into
+one, or an army seen where only its foragers were. An enemy "feint" order
+could raise the chance deliberately, which gives the enemy-deception idea a
+concrete form.
+
+### Offering and refusing battle
+
+**Source.** Part I describes armies camped a few miles apart for days, each
+drawing up on favourable ground and declining to fight on bad ground: the
+armies at Mantinea (418 BC) formed and re-formed over several days
+(Thucydides 5.64ff), and at Philippi (42 BC) the armies faced each other for
+weeks before the battle. Neither side at Cynocephalae (197 BC) knew exactly
+where the other was, and the battle began as an encounter in fog
+(Polybius 18.18–21).
+
+**Mechanic.** Battle should usually need two willing sides. An army ordered to
+avoid battle (a cautious general, or a letter with a low engagement score)
+camps on strong ground and refuses: an attacker must assault the camp at a
+heavy penalty, or wait, or go round. Two armies blundering into the same
+province without a chance to choose fight an *encounter* battle, where
+terrain bonuses don't apply. The letter's engagement score, now used only for
+reweighting ambiguous orders, would then mean something in every battle.
+
+### Generals can fall
+
+**Source.** Part IIIc: armies were held together by morale and cohesion, and
+the death of the leader could end a battle at once. When Cyrus the Younger
+fell at Cunaxa (401 BC) victory was no longer possible for his army, and only
+the Greek mercenaries held together (Xenophon, *Anabasis* 1.8). At Hastings,
+William had to bare his head to show he was alive. Part II describes how
+generals led from the front or moved between threatened points, and how
+soldiers expected a culturally fitting kind of courage of them.
+
+**Mechanic.** A general who leads from the front (high Aggression and Vanity:
+Velk) wins more of his close fights, but risks being killed or captured when
+he loses one. His army then falls to a second-in-command with an unknown
+temperament and a new voice in the letters. The player may write to a dead man
+for turns before the news arrives, and a *false* report of a general's death
+(an enemy rumour) is a natural deception.
+
+### Morale breaks armies, not losses
+
+**Source.** Part IIIc: pre-modern armies usually broke long before heavy
+losses. Devereaux cites averages of about 5% casualties for winners and 14%
+for losers in Greek hoplite battles, and similar figures for Roman battles,
+with most of the loser's dead falling in the pursuit. Morale and cohesion can
+also fail separately: an army may keep its ranks yet refuse to advance, as
+French divisions did in 1917.
+
+**Mechanic.** Give each army a morale value that falls with defeats, with
+long marches without rest and with the death of its general, and rises with
+victories and rest. Low morale makes an army refuse attacks on its own, apart
+from its general's loyalty, and a general may or may not admit it (Honesty).
+Casualties would move toward the historical pattern (loser ~15%, winner ~5%,
+more in a rout), and that needs re-tuning with `foc sim`, since lower losses
+make stalemates likelier.
+
+### What an army can actually do
+
+**Source.** Part IIIa: an army could only carry out what it had drilled, a
+limited "menu" of manoeuvres, and adding to it took training; Caesar drilled
+his men against elephants before Thapsus (*Bellum Africanum* 84). Part IIIb:
+how much an army could adapt depended on officers trusted to act on their own,
+as at Cynocephalae, where a tribune, not the general, turned maniples into the
+Macedonian flank (Polybius 18.26).
+
+**Mechanic.** A *drill* or quality value per army. Veterans carry out
+supports, scouting and conditional orders reliably. Fresh winter levies (the
+new musters) dilute it, so complex orders sometimes fail ("the levies could
+not be brought up in time"), and a won battle may end in pursuit and plunder
+rather than the next move. Armies that rest regain it. This puts a cost on
+the musters and makes "which army do I trust with the hard job" a real
+question.
+
 ## How these would build on the current game
 
 | Idea | Uses | New parts |
@@ -167,3 +292,9 @@ accepting them must reach every general before someone fights on.
 | Cipher | decision answers | a confidence penalty |
 | Readback | clarification letters | a "read back first" flag |
 | Commander's intent | own-judgement step | an intent field; a decision call |
+| Silence is not safety | belief map, web map | unknown versus seen-clear shading |
+| Misidentified forces | perception noise | gross-error draws; enemy feints |
+| Offering and refusing battle | engagement score, entrench | a refuse-battle stance; encounter battles |
+| Generals can fall | battles, reports, letters | general death and succession; rumours |
+| Morale | battles, refusals, honesty | a morale value per army; re-tuned casualties |
+| Drill | musters, supports, conditionals | a quality value per army |
