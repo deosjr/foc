@@ -124,3 +124,5 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; }
 .review-cols .tables { display: flex; flex-wrap: wrap; gap: .8rem; }
 .review-cols caption { text-align: left; font-weight: 600; color: var(--muted); }
 .rationale { font-family: var(--serif); font-style: italic; }
+.progress { display: inline-flex; align-items: center; gap: .5rem; color: var(--muted); font-style: italic; }
+.progress .spin { width: .9rem; height: .9rem; border: 2px solid var(--rule); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }

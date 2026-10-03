@@ -58,6 +58,13 @@ func do(s *Server, method, path string, form url.Values, htmx bool) *httptest.Re
 	return w
 }
 
+// endTurn posts End turn and waits for the background turn to finish.
+func endTurn(s *Server, form url.Values) *httptest.ResponseRecorder {
+	w := do(s, "POST", "/turn", form, true)
+	s.progress.wait()
+	return w
+}
+
 func TestRoutesPageVersusFragment(t *testing.T) {
 	s, _ := newServer(t, false)
 	for _, path := range []string{"/", "/map", "/letters", "/inbox", "/province/marren", "/map?highlight=L1"} {
@@ -104,10 +111,11 @@ func TestDraftsSurviveUntilTurnEnds(t *testing.T) {
 		t.Errorf("unknown general: %d", w.Code)
 	}
 	// End turn includes the textareas; an unsaved edit wins over the saved draft.
-	w = do(s, "POST", "/turn", url.Values{"draft-velk": {"March on Oros Ford."}}, true)
-	if w.Code != 200 {
+	w = endTurn(s, url.Values{"draft-velk": {"March on Oros Ford."}})
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `sse-connect="/turn/events"`) {
 		t.Fatalf("end turn: %d %s", w.Code, w.Body.String())
 	}
+	w = do(s, "GET", "/", nil, true)
 	g.Lock()
 	sent := g.Sent()
 	g.Unlock()
@@ -136,6 +144,7 @@ func TestConcurrentTurnRejected(t *testing.T) {
 	if code := <-done; code != 200 {
 		t.Errorf("first POST /turn: %d", code)
 	}
+	s.progress.wait()
 }
 
 func TestDebugRoutes(t *testing.T) {
@@ -143,7 +152,7 @@ func TestDebugRoutes(t *testing.T) {
 	if w := do(s, "GET", "/debug/truth", nil, false); w.Code != 404 {
 		t.Errorf("/debug/truth without --debug: %d", w.Code)
 	}
-	do(s, "POST", "/turn", url.Values{"draft-velk": {"Hold."}}, true)
+	endTurn(s, url.Values{"draft-velk": {"Hold."}})
 	if strings.Contains(do(s, "GET", "/inbox", nil, true).Body.String(), "Debug:") {
 		t.Error("debug drawer shown without --debug")
 	}
@@ -151,7 +160,7 @@ func TestDebugRoutes(t *testing.T) {
 	if w := do(d, "GET", "/debug/truth", nil, false); w.Code != 200 || !strings.Contains(w.Body.String(), "e-1") {
 		t.Errorf("/debug/truth with --debug: %d", w.Code)
 	}
-	do(d, "POST", "/turn", url.Values{"draft-velk": {"Hold."}}, true)
+	endTurn(d, url.Values{"draft-velk": {"Hold."}})
 	if !strings.Contains(do(d, "GET", "/inbox", nil, true).Body.String(), "Debug:") {
 		t.Error("debug drawer missing with --debug")
 	}
@@ -215,7 +224,7 @@ func TestReview(t *testing.T) {
 		t.Errorf("review before the end without --debug: %d, want 403", w.Code)
 	}
 	for i := 0; i < 10 && !g.Over(); i++ {
-		do(s, "POST", "/turn", url.Values{"draft-velk": {"March on Kethra."}, "draft-saris": {"Hold Duna Hills."}}, true)
+		endTurn(s, url.Values{"draft-velk": {"March on Kethra."}, "draft-saris": {"Hold Duna Hills."}})
 	}
 	if !g.Over() {
 		t.Fatal("game did not end")
@@ -253,5 +262,42 @@ func TestRouteOverlay(t *testing.T) {
 	}
 	if !strings.Contains(routes, "to DV") || !strings.Contains(routes, "to IS") {
 		t.Error("route labels missing")
+	}
+}
+
+func TestTurnEventsStream(t *testing.T) {
+	s, g := newServer(t, false)
+	srv := httptest.NewServer(s)
+	defer srv.Close()
+	g.Lock() // keep the turn from finishing until the stream is listening
+	go do(s, "POST", "/turn", url.Values{"draft-velk": {"March on Hollow Wood."}}, true)
+	for !s.running.Load() {
+	}
+	resp, err := http.Get(srv.URL + "/turn/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
+		t.Errorf("content type %q", ct)
+	}
+	g.Unlock()
+	var got strings.Builder
+	buf := make([]byte, 4096)
+	for !strings.Contains(got.String(), "event: turn-done") {
+		n, err := resp.Body.Read(buf)
+		got.Write(buf[:n])
+		if err != nil {
+			break
+		}
+	}
+	for _, want := range []string{"event: phase", "generals reading", "reports being written", "event: turn-done"} {
+		if !strings.Contains(got.String(), want) {
+			t.Errorf("stream missing %q:\n%s", want, got.String())
+		}
+	}
+	s.progress.wait()
+	if g.Turn() != 2 {
+		t.Errorf("turn = %d after the stream ended", g.Turn())
 	}
 }

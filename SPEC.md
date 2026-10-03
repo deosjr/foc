@@ -663,7 +663,7 @@ fog-of-command/
 
 *Later phases*, reordered so the tools for judging friction arrive before the friction itself, and the letter loop deepens before the rules do:
 
-5. **Review and polish.** Rationales, the `/review` page with side-by-side maps, SSE progress, route overlay. (The recognised-names line already shipped with milestone 2.)
+5. **Review and polish.** Rationales, the `/review` page with side-by-side maps, SSE progress, route overlay. (The recognised-names line already shipped with milestone 2.) *(Status: done.)*
 6. **Full friction.** Interception, clarification letters, plausibility and loyalty handling, honesty-driven omissions, standing orders beyond movement.
 7. **Full rules.** `Support`, `Entrench`, `Scout`, the third general, the heuristic enemy AI, the full map and 20 turns. Hesk needs the own-judgement step from milestone 6.
 8. **More providers.** `jev`, the remaining LLM adapters, exact record/replay. The `jev` adapter waits on TypeSafe's API docs and a key.

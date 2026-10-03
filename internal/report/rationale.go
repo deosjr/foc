@@ -71,7 +71,8 @@ func (w *RationaleWriter) Write(ctx context.Context, g *model.General, f Rationa
 	if err != nil {
 		return "", err
 	}
-	text := strings.TrimSpace(resp.Text)
+	// The page adds its own quotation marks; drop any the model added.
+	text := strings.Trim(strings.TrimSpace(resp.Text), "\"'“”‘’ ")
 	if words := strings.Fields(text); len(words) > 80 {
 		text = strings.Join(words[:80], " ") + "…"
 	}

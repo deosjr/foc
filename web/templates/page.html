@@ -7,6 +7,7 @@
 <title>Fog of Command</title>
 <link rel="stylesheet" href="/static/style.css">
 <script src="/static/htmx.min.js"></script>
+<script src="/static/sse.js"></script>
 <script src="/static/compose.js" defer></script>
 </head>
 <body>
@@ -21,9 +22,8 @@
   {{if .Over}}
   <div class="outcome">{{.Outcome}}</div>
   {{else}}
-  <button class="end-turn" hx-post="/turn" hx-target="#game" hx-swap="outerHTML"
-          hx-include=".composer textarea" hx-indicator="#spinner" hx-disabled-elt="this">End turn</button>
-  <span id="spinner" class="spinner" role="status">Couriers riding, generals reading…</span>
+  <span id="turn-controls"><button class="end-turn" hx-post="/turn" hx-target="#turn-controls" hx-swap="outerHTML"
+          hx-include=".composer textarea" hx-disabled-elt="this">End turn</button></span>
   {{end}}
   <span class="spacer"></span>
   {{if or .Over .DebugMode}}<a class="truth" href="/review" target="_blank" rel="noopener">after-action review</a>{{end}}
@@ -47,3 +47,10 @@
 <html lang="en"><head><meta charset="utf-8"><title>Truth · Fog of Command</title>
 <link rel="stylesheet" href="/static/style.css"></head>
 <body class="truth-page"><h1>True game state</h1><pre>{{.}}</pre></body></html>{{end}}
+
+
+{{define "progress"}}<span id="turn-controls" class="progress" role="status" hx-ext="sse" sse-connect="/turn/events">
+  <span class="spin" aria-hidden="true"></span>
+  <span sse-swap="phase">Sealing the letters…</span>
+  <span hidden hx-get="/" hx-trigger="sse:turn-done" hx-select="#game" hx-target="#game" hx-swap="outerHTML"></span>
+</span>{{end}}

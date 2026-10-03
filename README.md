@@ -14,6 +14,9 @@ go run ./cmd/foc --open
 ```
 
 With no `config.yaml`, both models are offline mocks: no network, no keys.
+When the campaign ends, the **after-action review** (`/review`) steps through
+each turn with what you believed beside what was true, and each general's
+private rationale for what he did with your letters.
 Add `--debug` for the debug drawer on each report (the letter, the decision
 probabilities, the draw, the chosen order, and how the general distorted what
 he saw) and the `/debug/truth` page.

@@ -22,12 +22,13 @@ import (
 
 // Server is the HTTP front end for one game.
 type Server struct {
-	g       *game.Game
-	debug   bool
-	tmpl    *template.Template
-	running atomic.Bool
-	mux     *http.ServeMux
-	timeout time.Duration
+	g        *game.Game
+	debug    bool
+	tmpl     *template.Template
+	running  atomic.Bool
+	progress *progress
+	mux      *http.ServeMux
+	timeout  time.Duration
 }
 
 // New builds the server. debug enables the truth routes and the debug drawer.
@@ -36,7 +37,7 @@ func New(g *game.Game, debug bool) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{g: g, debug: debug, tmpl: t, mux: http.NewServeMux(), timeout: 5 * time.Minute}
+	s := &Server{g: g, debug: debug, tmpl: t, progress: newProgress(), mux: http.NewServeMux(), timeout: 15 * time.Minute}
 	static, err := fs.Sub(webfs.FS, "static")
 	if err != nil {
 		return nil, err
@@ -51,6 +52,7 @@ func New(g *game.Game, debug bool) (*Server, error) {
 	s.mux.HandleFunc("GET /inbox", s.inbox)
 	s.mux.HandleFunc("GET /letter/{id}", s.letter)
 	s.mux.HandleFunc("POST /turn", s.endTurn)
+	s.mux.HandleFunc("GET /turn/events", s.events)
 	s.mux.HandleFunc("POST /save", s.save)
 	s.mux.HandleFunc("GET /review", s.review)
 	if debug {
@@ -241,41 +243,52 @@ type letterData struct {
 	Debug *DebugView
 }
 
-// endTurn seals the drafts (including any the browser had not saved yet)
-// and runs the turn. A second call while a turn runs is rejected.
+// endTurn seals the drafts (including any the browser had not saved yet),
+// starts phases 2–10 in the background and returns the progress line, which
+// follows the turn over /turn/events. A second call while a turn runs is
+// rejected.
 func (s *Server) endTurn(w http.ResponseWriter, r *http.Request) {
 	if !s.running.CompareAndSwap(false, true) {
 		http.Error(w, "a turn is already being resolved", http.StatusConflict)
 		return
 	}
-	defer s.running.Store(false)
 	if err := r.ParseForm(); err != nil {
+		s.running.Store(false)
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
+	s.progress.start()
 	s.g.Lock()
+	if s.g.Over() {
+		s.g.Unlock()
+		s.running.Store(false)
+		s.progress.finish(game.ErrOver)
+		http.Error(w, game.ErrOver.Error(), http.StatusConflict)
+		return
+	}
 	for _, id := range s.g.GeneralIDs() {
 		if text, ok := r.PostForm["draft-"+id]; ok && len(text) > 0 {
-			if err := s.g.SetDraft(id, text[0]); err != nil && err != game.ErrOver {
+			if err := s.g.SetDraft(id, text[0]); err != nil {
 				s.g.Unlock()
+				s.running.Store(false)
+				s.progress.finish(err)
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
-	err := s.g.EndTurn(ctx, nil)
-	cancel()
-	s.g.Unlock()
-	if err != nil {
-		code := http.StatusInternalServerError
-		if err == game.ErrOver {
-			code = http.StatusConflict
+	go func() {
+		defer s.g.Unlock()
+		ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
+		defer cancel()
+		err := s.g.EndTurn(ctx, s.progress.set)
+		if err != nil {
+			log.Printf("turn failed: %v", err)
 		}
-		http.Error(w, err.Error(), code)
-		return
-	}
-	s.render(w, r, "game", s.view(r))
+		s.running.Store(false)
+		s.progress.finish(err)
+	}()
+	s.render(w, r, "progress", nil)
 }
 
 func (s *Server) save(w http.ResponseWriter, r *http.Request) {
