@@ -42,10 +42,10 @@ type Options struct {
 // LetterRecord is a letter plus everything the game knows about it.
 type LetterRecord struct {
 	model.Letter
-	Delivered      bool                       `json:"delivered"`
-	DeliveredTurn  int                        `json:"delivered_turn,omitempty"`
-	Facts          *report.ReportFacts        `json:"facts,omitempty"`
-	Written        *report.Written            `json:"written,omitempty"`
+	Delivered      bool                      `json:"delivered"`
+	DeliveredTurn  int                       `json:"delivered_turn,omitempty"`
+	Facts          *report.ReportFacts       `json:"facts,omitempty"`
+	Written        *report.Written           `json:"written,omitempty"`
 	Interpretation *interpret.Interpretation `json:"interpretation,omitempty"`
 }
 

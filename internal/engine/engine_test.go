@@ -30,11 +30,15 @@ func state(e *Engine, armies ...*Army) *GameState {
 	return s
 }
 
-func p(id, loc string, str int) *Army { return &Army{ID: id, Side: model.Player, Location: loc, Strength: str} }
+func p(id, loc string, str int) *Army {
+	return &Army{ID: id, Side: model.Player, Location: loc, Strength: str}
+}
 func en(id, loc string, str int) *Army {
 	return &Army{ID: id, Side: model.Enemy, Location: loc, Strength: str}
 }
-func move(id, to string) model.Order { return model.Order{ArmyID: id, Type: model.MoveToward, Target: to} }
+func move(id, to string) model.Order {
+	return model.Order{ArmyID: id, Type: model.MoveToward, Target: to}
+}
 func retreat(id, to string) model.Order {
 	return model.Order{ArmyID: id, Type: model.Retreat, Target: to}
 }

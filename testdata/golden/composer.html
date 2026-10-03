@@ -1,0 +1,16 @@
+<article class="composer" id="composer-velk">
+  <h3>Damar Velk</h3>
+  <p class="bio">A veteran of the hill wars, quick to the charge and quicker to boast.</p>
+  <p class="meta">Last reported at Velia in turn 1. A courier there takes less than a turn.</p>
+  
+  <textarea name="draft-velk" rows="5" placeholder="Write to Damar Velk…" aria-label="Letter to Damar Velk"
+            hx-put="/drafts/velk" hx-trigger="keyup changed delay:800ms, change"
+            hx-target="#recognised-velk" hx-swap="outerHTML">Press on to Marren and Sarnoss.</textarea>
+  <p class="recognised" id="recognised-velk">Places named: Marren. <span class="warn">Not recognised: Sarnoss.</span> <span class="saved">Draft saved.</span></p>
+  <button class="discard" hx-delete="/drafts/velk" hx-target="#composer-velk" hx-swap="outerHTML">Discard draft</button>
+  
+  <ul class="sent">
+    <li><span class="stamp">sent turn 1</span> · <a href="#card-L4">read the reply</a>
+      <blockquote>March on Hollow Wood.</blockquote></li>
+  </ul>
+</article>

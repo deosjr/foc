@@ -1,0 +1,21 @@
+{{define "letters"}}<h2>Letters to the field</h2>
+{{range .Generals}}{{template "composer" .}}{{end}}{{end}}
+
+{{define "composer"}}<article class="composer" id="composer-{{.ID}}">
+  <h3>{{.Name}}</h3>
+  <p class="bio">{{.Bio}}</p>
+  <p class="meta">{{if .Destroyed}}Reported lost with the army.{{else}}Last reported at {{.ProvinceName}}{{if .AsOfTurn}} in turn {{.AsOfTurn}}{{else}} at the start{{end}}. A courier there takes {{if eq .CourierDelay 0}}less than a turn{{else}}about {{.CourierDelay}} turn{{if gt .CourierDelay 1}}s{{end}}{{end}}.{{end}}</p>
+  {{if not .Closed}}
+  <textarea name="draft-{{.ID}}" rows="5" placeholder="Write to {{.Name}}…" aria-label="Letter to {{.Name}}"
+            hx-put="/drafts/{{.ID}}" hx-trigger="keyup changed delay:800ms, change"
+            hx-target="#recognised-{{.ID}}" hx-swap="outerHTML">{{.Draft}}</textarea>
+  {{template "recognised" .}}
+  {{if .Draft}}<button class="discard" hx-delete="/drafts/{{.ID}}" hx-target="#composer-{{.ID}}" hx-swap="outerHTML">Discard draft</button>{{end}}
+  {{end}}
+  {{if .Sent}}<ul class="sent">{{range .Sent}}
+    <li><span class="stamp">sent turn {{.SentTurn}}</span> · {{if .ReplyID}}<a href="#card-{{.ReplyID}}">read the reply</a>{{else}}<span class="noreply">no reply yet</span>{{end}}
+      <blockquote>{{.Body}}</blockquote></li>{{end}}
+  </ul>{{end}}
+</article>{{end}}
+
+{{define "recognised"}}<p class="recognised" id="recognised-{{.ID}}">{{if .Draft}}{{if .Found}}Places named: {{join .Found}}.{{else}}No places named.{{end}}{{if .Unknown}} <span class="warn">Not recognised: {{join .Unknown}}.</span>{{end}} <span class="saved">Draft saved.</span>{{end}}</p>{{end}}

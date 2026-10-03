@@ -33,12 +33,12 @@ const specLetter = `To my lord in Karsa. As you commanded, I took the ford. They
 
 func TestNumbersIn(t *testing.T) {
 	cases := map[string][]int{
-		"twelve hundred of theirs":             {1200},
-		"2,600 good men and 3 riders":          {2600, 3},
-		"two thousand six hundred":             {2600},
-		"twenty-six hundred":                   {2600},
-		"a hundred and fifty":                  {150},
-		"some 12 hundred":                      {1200},
+		"twelve hundred of theirs":              {1200},
+		"2,600 good men and 3 riders":           {2600, 3},
+		"two thousand six hundred":              {2600},
+		"twenty-six hundred":                    {2600},
+		"a hundred and fifty":                   {150},
+		"some 12 hundred":                       {1200},
 		"no numbers here, only hundreds of men": nil,
 	}
 	for text, want := range cases {

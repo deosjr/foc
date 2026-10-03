@@ -1,0 +1,48 @@
+{{define "page"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "allowScriptTags": false}'>
+<title>Fog of Command</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/htmx.min.js"></script>
+<script src="/static/compose.js" defer></script>
+</head>
+<body>
+{{template "game" .}}
+</body>
+</html>{{end}}
+
+{{define "game"}}<div id="game">
+<header class="bar">
+  <h1>Fog of Command</h1>
+  <div class="when">Turn {{.Turn}} · {{.Season}}</div>
+  {{if .Over}}
+  <div class="outcome">{{.Outcome}}</div>
+  {{else}}
+  <button class="end-turn" hx-post="/turn" hx-target="#game" hx-swap="outerHTML"
+          hx-include=".composer textarea" hx-indicator="#spinner" hx-disabled-elt="this">End turn</button>
+  <span id="spinner" class="spinner" role="status">Couriers riding, generals reading…</span>
+  {{end}}
+  <span class="spacer"></span>
+  {{if .DebugMode}}<a class="truth" href="/debug/truth" target="_blank" rel="noopener">truth</a>{{end}}
+  <button class="save" hx-post="/save" hx-target="#notice">Save run</button>
+  <span id="notice" class="notice"></span>
+</header>
+<main class="columns">
+  <section class="letters" id="letters">{{template "letters" .}}</section>
+  <section class="centre">
+    <div id="map">{{template "map" .}}</div>
+    <div id="province-detail" class="detail">{{if .Province}}{{template "province" .}}{{else}}<p class="hint">Click a province for what you know of it. While you are writing a letter, clicking a province writes its name.</p>{{end}}</div>
+  </section>
+  <section class="inbox" id="inbox">{{template "inbox" .}}</section>
+</main>
+</div>{{end}}
+
+{{define "notice"}}{{.Notice}}{{end}}
+
+{{define "truth"}}<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Truth · Fog of Command</title>
+<link rel="stylesheet" href="/static/style.css"></head>
+<body class="truth-page"><h1>True game state</h1><pre>{{.}}</pre></body></html>{{end}}
