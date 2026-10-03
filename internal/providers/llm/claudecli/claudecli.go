@@ -38,6 +38,7 @@ var isolation = []struct {
 	token string
 	args  []string
 }{
+	{"--safe-mode", []string{"--safe-mode"}},                 // no plugins, hooks, MCP, skills or CLAUDE.md; auth still works
 	{"--tools", []string{"--tools", ""}},                     // no built-in tools
 	{"--strict-mcp-config", []string{"--strict-mcp-config"}}, // no MCP servers
 	{"--setting-sources", []string{"--setting-sources", "project"}},
@@ -116,8 +117,10 @@ type result struct {
 	CostUSD   float64                    `json:"total_cost_usd"`
 	ModelUsed map[string]json.RawMessage `json:"modelUsage"`
 	Usage     struct {
-		InputTokens  int `json:"input_tokens"`
-		OutputTokens int `json:"output_tokens"`
+		InputTokens   int `json:"input_tokens"`
+		CacheCreation int `json:"cache_creation_input_tokens"`
+		CacheRead     int `json:"cache_read_input_tokens"`
+		OutputTokens  int `json:"output_tokens"`
 	} `json:"usage"`
 }
 
@@ -157,7 +160,8 @@ func (m *Model) Complete(ctx context.Context, req llm.Request) (llm.Response, er
 	model := mainModel(r.ModelUsed, m.cfg.Model)
 	return llm.Response{
 		Text: r.Result, Provider: "claudecli", Model: model,
-		InputTok: r.Usage.InputTokens, OutputTok: r.Usage.OutputTokens, Raw: stdout.Bytes(),
+		InputTok:  r.Usage.InputTokens + r.Usage.CacheCreation + r.Usage.CacheRead,
+		OutputTok: r.Usage.OutputTokens, Raw: stdout.Bytes(),
 	}, nil
 }
 

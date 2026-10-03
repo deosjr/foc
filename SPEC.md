@@ -659,7 +659,7 @@ fog-of-command/
 1. **Engine only.** Map loading, resolution for `Hold`, `MoveToward` and `Retreat`, victory, driven by Go tests and a debug endpoint that accepts structured orders.
 2. **Pipeline on mocks, in the browser.** Mock decision model and LLM, interpretation steps 3–5, number distortion, reports, courier delay. The web page with map, composers, inbox, End turn and the per-report debug drawer. Playable offline.
 3. **Eval harness.** `foc eval` and the first 30–50 labelled letters, run against the mock and the `llm` decision adapter.
-4. **Real providers.** One real LLM adapter with report validation and fallback, the `llm` decision adapter, caching and retry middleware. Check the PoC done-criteria. *(Status: built and verified end to end on a local Llama 3.1 8B through Ollama; the done-criteria wait on a Claude API key.)*
+4. **Real providers.** One real LLM adapter with report validation and fallback, the `llm` decision adapter, caching and retry middleware. Check the PoC done-criteria. *(Status: verified on a local Llama 3.1 8B through Ollama, then on Claude Sonnet 5 through the Claude Code CLI (`claudecli` provider, a stand-in until an API key is available). On Claude: 23/23 clear eval letters agree; Velk likelier to march than Saris on 7/7 ambiguous letters that reached the ambiguous branch; a scripted 10-turn game over the HTTP routes with 20 reports, none rejected, no fallback letters; turns averaged 7.3 s, at most 13.3 s.)*
 
 *Later phases*, reordered so the tools for judging friction arrive before the friction itself, and the letter loop deepens before the rules do:
 

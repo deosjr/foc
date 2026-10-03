@@ -49,6 +49,12 @@ func Models(cfg *config.Config, log *runlog.Log, runDir string) (decision.Model,
 	if err != nil {
 		return nil, nil, err
 	}
-	d := &middleware.Decision{Inner: rawDecision, Opts: opts(cfg.Decision)}
+	dopts := opts(cfg.Decision)
+	if cfg.Decision.Provider == "llm" {
+		// The "llm" decision provider is only as good as the LLM under it,
+		// so that LLM is part of the cache key.
+		dopts.Model = cfg.LLM.Provider + "/" + cfg.LLM.Model
+	}
+	d := &middleware.Decision{Inner: rawDecision, Opts: dopts}
 	return d, l, nil
 }
