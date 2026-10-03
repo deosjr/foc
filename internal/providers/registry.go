@@ -30,6 +30,10 @@ type ProviderConfig struct {
 	// constrained output when a request carries a schema. Anthropic always
 	// uses the schema when one is given.
 	StructuredOutput bool `yaml:"structured_output"`
+	// Command is the executable for command-line providers (claudecli);
+	// Concurrency caps how many run at once (default 4).
+	Command     string `yaml:"command"`
+	Concurrency int    `yaml:"concurrency"`
 }
 
 // APIKey reads the key from the configured environment variable. Keys are

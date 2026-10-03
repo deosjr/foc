@@ -1,0 +1,38 @@
+# Claude through the Claude Code CLI (`claude -p`), using your Claude Code
+# login instead of an API key. Install Claude Code and sign in once by
+# running `claude` in a terminal. Calls count against your Claude Code usage.
+# Each call is its own Claude Code process, run in an empty scratch
+# directory with tools, MCP servers and user settings switched off.
+# temperature and max_tokens cannot be set this way and are ignored.
+seed: 42
+mode: live
+cache_file: .cache/responses.jsonl   # reuse model answers across runs while developing
+
+decision:
+  provider: llm       # reads letters by asking the llm below for JSON probabilities
+  temperature: 0
+  timeout: 120s
+
+llm:
+  provider: claudecli
+  model: claude-sonnet-5
+  command: claude     # or a full path to the CLI
+  concurrency: 4      # Claude Code processes at once
+  timeout: 120s
+
+interpretation:
+  clear_threshold: 0.8
+  unclear_threshold: 0.4
+  plausibility_threshold: 0.35
+  rationale: true      # one extra LLM call per letter read; shown only in the review
+
+report:
+  min_words: 30
+  max_words: 260
+
+ruleset: rulesets/ancient.yaml
+map: maps/valley.json
+generals: content/generals.yaml
+scenario: scenarios/poc.yaml
+prompts: prompts
+runs_dir: runs

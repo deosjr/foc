@@ -27,6 +27,7 @@ import (
 	_ "github.com/deosjr/foc/internal/providers/decision/llm"
 	_ "github.com/deosjr/foc/internal/providers/decision/mock"
 	_ "github.com/deosjr/foc/internal/providers/llm/anthropic"
+	_ "github.com/deosjr/foc/internal/providers/llm/claudecli"
 	_ "github.com/deosjr/foc/internal/providers/llm/mock"
 	_ "github.com/deosjr/foc/internal/providers/llm/openaicompat"
 )

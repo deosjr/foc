@@ -39,6 +39,10 @@ ollama pull llama3.1:8b
 cp config.ollama.example.yaml config.yaml
 ```
 
+Or use Claude through your Claude Code login instead of an API key (calls
+count against your Claude Code usage): install Claude Code, run `claude` once
+to sign in, then `cp config.claudecli.example.yaml config.yaml`.
+
 An 8B model is good enough to exercise the whole pipeline, but expect 15–45
 seconds a turn and weaker readings than Claude.
 

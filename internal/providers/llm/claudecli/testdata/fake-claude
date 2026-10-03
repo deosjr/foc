@@ -1,0 +1,27 @@
+#!/bin/sh
+# A stand-in for the claude CLI, for tests. It never touches the network.
+if [ "$1" = "--help" ]; then
+  echo "Usage: claude [options] [prompt]"
+  echo "  -p, --print                 Print response and exit"
+  echo "  --output-format <format>    text, json or stream-json"
+  echo "  --system-prompt <prompt>    System prompt"
+  echo "  --model <model>             Model"
+  echo "  --tools <tools...>          Built-in tools"
+  echo "  --strict-mcp-config         Only use MCP servers from --mcp-config"
+  exit 0
+fi
+input=$(cat)
+case "$input" in
+  *FAIL-EXIT*) echo "boom" >&2; exit 3 ;;
+  *FAIL-RESULT*) echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"usage limit reached"}'; exit 0 ;;
+esac
+# Echo the arguments and the prompt back so tests can check them.
+args="$*"
+python3 - "$args" "$input" "$PWD" <<'PY'
+import json, sys
+args, prompt, cwd = sys.argv[1], sys.argv[2], sys.argv[3]
+print(json.dumps({"type": "result", "subtype": "success", "is_error": False,
+  "result": "ARGS[" + args + "] PROMPT[" + prompt + "] CWD[" + cwd + "]",
+  "usage": {"input_tokens": 11, "output_tokens": 7},
+  "modelUsage": {"claude-haiku-4-5": {"outputTokens": 2}, "claude-sonnet-5": {"outputTokens": 7}}}))
+PY
