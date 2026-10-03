@@ -31,6 +31,10 @@ func (m *Model) Complete(_ context.Context, req llm.Request) (llm.Response, erro
 			text = report.Fallback(f)
 			break
 		}
+		if f, ok := report.RationaleFromPrompt(msg.Content); ok {
+			text = report.FallbackRationale(f)
+			break
+		}
 	}
 	return llm.Response{
 		Text: text, Provider: "mock", Model: "template",

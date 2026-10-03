@@ -1,22 +1,30 @@
-{{define "map"}}<svg class="map" viewBox="0 0 1000 600" role="img" aria-label="The valley as you believe it to be">
-  {{range .Map.Roads}}<line class="road" x1="{{.X1}}" y1="{{.Y1}}" x2="{{.X2}}" y2="{{.Y2}}"/>
+{{define "map"}}{{template "mapsvg" .Map}}
+<p class="legend"><span class="key owner-player"></span> yours <span class="key owner-enemy"></span> enemy <span class="key owner-neutral"></span> neutral · ★ supply centre · T5 = news as of turn 5 · ~ = estimate
+ · {{if .Map.ShowRoutes}}<a href="/" hx-get="/map" hx-target="#map">hide courier routes</a>{{else}}<a href="/?routes=1" hx-get="/map?routes=1" hx-target="#map">show courier routes</a>{{end}}{{if .Map.Highlight}} · <a href="/" hx-get="/map" hx-target="#map">clear marks</a>{{end}}</p>{{end}}
+
+{{define "mapsvg"}}<svg class="map{{if .Truth}} truth{{end}}" viewBox="0 0 1000 600" role="img" aria-label="{{if .Truth}}The valley as it truly was{{else}}The valley as you believe it to be{{end}}">
+  {{range .Roads}}<line class="road" x1="{{.X1}}" y1="{{.Y1}}" x2="{{.X2}}" y2="{{.Y2}}"/>
   {{end}}
-  {{range .Map.Provinces}}<g class="prov owner-{{.Owner}}{{if .Highlight}} hl{{end}}{{if .Stale}} stale{{end}}"
-     data-province="{{.Name}}" hx-get="/province/{{.ID}}" hx-target="#province-detail" tabindex="0">
+  {{range .Routes}}<polyline class="route" points="{{.Points}}"/>
+  {{end}}
+  {{$interactive := .Interactive}}
+  {{range .Provinces}}<g class="prov owner-{{.Owner}}{{if .Highlight}} hl{{end}}{{if .Stale}} stale{{end}}"
+     data-province="{{.Name}}"{{if $interactive}} hx-get="/province/{{.ID}}" hx-target="#province-detail" tabindex="0"{{end}}>
     <title>{{.Title}}</title>
     {{if .Capital}}<circle class="capital-ring" cx="{{.X}}" cy="{{.Y}}" r="41"/>{{end}}
     <circle class="disc" cx="{{.X}}" cy="{{.Y}}" r="34"/>
     {{if .Supply}}<text class="supply" x="{{sub .X 30}}" y="{{sub .Y 24}}">★</text>{{end}}
-    <text class="badge" x="{{add .X 30}}" y="{{sub .Y 26}}">{{.Badge}}</text>
+    {{if .Badge}}<text class="badge" x="{{add .X 30}}" y="{{sub .Y 26}}">{{.Badge}}</text>{{end}}
     <text class="name" x="{{.X}}" y="{{add .Y 56}}">{{.Name}}</text>
     {{if .Enemy}}<g class="enemy"><rect x="{{sub .X 32}}" y="{{sub .Y 66}}" width="64" height="20" rx="4"/><text x="{{.X}}" y="{{sub .Y 51}}">{{.Enemy}}</text></g>{{end}}
   </g>
   {{end}}
-  {{range .Map.Tokens}}<g class="token" opacity="{{.Opacity}}"><title>{{.Title}}</title>
+  {{range .Tokens}}<g class="token side-{{.Side}}" opacity="{{.Opacity}}"><title>{{.Title}}</title>
     <circle cx="{{.X}}" cy="{{.Y}}" r="13"/><text x="{{.X}}" y="{{add .Y 4.5}}">{{.Initials}}</text></g>
   {{end}}
-</svg>
-<p class="legend"><span class="key owner-player"></span> yours <span class="key owner-enemy"></span> enemy <span class="key owner-neutral"></span> neutral · ★ supply centre · T5 = news as of turn 5 · ~ = estimate{{if .Map.Highlight}} · <a href="/" hx-get="/map" hx-target="#map">clear marks</a>{{end}}</p>{{end}}
+  {{range .Routes}}<text class="route-label" x="{{.LabelX}}" y="{{.LabelY}}">{{.Label}}</text>
+  {{end}}
+</svg>{{end}}
 
 {{define "province"}}{{with .Province}}<h3>{{.Name}}</h3>
 <p class="meta">{{.Terrain}}{{if .Supply}} · supply centre{{end}}{{if .Capital}} · capital{{end}}</p>

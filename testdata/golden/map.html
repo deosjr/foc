@@ -13,6 +13,8 @@
   <line class="road" x1="660" y1="430" x2="900" y2="370"/>
   <line class="road" x1="820" y1="200" x2="900" y2="370"/>
   
+  
+  
   <g class="prov owner-player"
      data-province="Karsa" hx-get="/province/karsa" hx-target="#province-detail" tabindex="0">
     <title>Karsa (city) — last known player, as of turn 1</title>
@@ -115,10 +117,12 @@ enemy reported: ~3000 men</title>
     
   </g>
   
-  <g class="token" opacity="1"><title>Damar Velk, reported here as of turn 1</title>
+  <g class="token side-player" opacity="1"><title>Damar Velk, reported here as of turn 1</title>
     <circle cx="280" cy="190" r="13"/><text x="280" y="194.5">DV</text></g>
-  <g class="token" opacity="1"><title>Ione Saris, reported here as of turn 1</title>
+  <g class="token side-player" opacity="1"><title>Ione Saris, reported here as of turn 1</title>
     <circle cx="280" cy="420" r="13"/><text x="280" y="424.5">IS</text></g>
   
+  
 </svg>
-<p class="legend"><span class="key owner-player"></span> yours <span class="key owner-enemy"></span> enemy <span class="key owner-neutral"></span> neutral · ★ supply centre · T5 = news as of turn 5 · ~ = estimate</p>
+<p class="legend"><span class="key owner-player"></span> yours <span class="key owner-enemy"></span> enemy <span class="key owner-neutral"></span> neutral · ★ supply centre · T5 = news as of turn 5 · ~ = estimate
+ · <a href="/?routes=1" hx-get="/map?routes=1" hx-target="#map">show courier routes</a></p>

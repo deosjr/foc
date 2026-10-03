@@ -52,6 +52,7 @@ func New(g *game.Game, debug bool) (*Server, error) {
 	s.mux.HandleFunc("GET /letter/{id}", s.letter)
 	s.mux.HandleFunc("POST /turn", s.endTurn)
 	s.mux.HandleFunc("POST /save", s.save)
+	s.mux.HandleFunc("GET /review", s.review)
 	if debug {
 		s.mux.HandleFunc("GET /debug/truth", s.truth)
 	}
@@ -119,7 +120,7 @@ type pageData struct {
 func (s *Server) view(r *http.Request) pageData {
 	s.g.Lock()
 	defer s.g.Unlock()
-	return pageData{PlayerView: BuildView(s.g, s.debug, r.URL.Query().Get("highlight")), DebugMode: s.debug}
+	return pageData{PlayerView: BuildView(s.g, s.debug, r.URL.Query().Get("highlight"), r.URL.Query().Get("routes") == "1"), DebugMode: s.debug}
 }
 
 func (s *Server) index(w http.ResponseWriter, r *http.Request) {
@@ -298,9 +299,15 @@ func (s *Server) truth(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.renderPage(w, "truth", string(b))
+}
+
+// renderPage renders a standalone page template.
+func (s *Server) renderPage(w http.ResponseWriter, name string, data any) {
 	var buf bytes.Buffer
-	if err := s.tmpl.ExecuteTemplate(&buf, "truth", string(b)); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err := s.tmpl.ExecuteTemplate(&buf, name, data); err != nil {
+		log.Printf("template %s: %v", name, err)
+		http.Error(w, "template error", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

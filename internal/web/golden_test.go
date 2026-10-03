@@ -20,7 +20,7 @@ func TestGoldenFragments(t *testing.T) {
 		t.Fatal(err)
 	}
 	g.SetDraft("velk", "Press on to Marren and Sarnoss.")
-	v := BuildView(g, false, "")
+	v := BuildView(g, false, "", false)
 	g.Unlock()
 	d := pageData{PlayerView: v}
 	cases := map[string]struct {

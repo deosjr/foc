@@ -2,7 +2,6 @@ package web
 
 import (
 	"fmt"
-	"math"
 	"sort"
 	"strings"
 
@@ -43,37 +42,6 @@ type GeneralView struct {
 	Debug        bool
 }
 
-// MapView is the believed map, laid out for the SVG template. All the logic
-// lives here; the template only draws.
-type MapView struct {
-	Provinces []ProvinceMark
-	Roads     []Road
-	Tokens    []Token
-	Highlight string // letter id whose mentions are highlighted
-}
-
-type ProvinceMark struct {
-	ID, Name  string
-	X, Y      float64
-	Owner     string // player | enemy | neutral
-	Badge     string // "T5": the turn the knowledge dates from
-	Supply    bool
-	Capital   bool
-	Enemy     string // reported enemy strength, "~" prefixed when an estimate
-	Title     string
-	Highlight bool
-	Stale     bool
-}
-
-type Road struct{ X1, Y1, X2, Y2 float64 }
-
-type Token struct {
-	X, Y     float64
-	Initials string
-	Opacity  float64
-	Title    string
-}
-
 func initials(name string) string {
 	var b strings.Builder
 	for _, w := range strings.Fields(name) {
@@ -89,7 +57,7 @@ func initials(name string) string {
 }
 
 // BuildView assembles the PlayerView. Call with the game lock held.
-func BuildView(g *game.Game, debug bool, highlight string) PlayerView {
+func BuildView(g *game.Game, debug bool, highlight string, routes bool) PlayerView {
 	v := PlayerView{
 		Turn: g.Turn(), Season: g.Season(), Belief: *g.Belief(),
 		Drafts: map[string]string{}, Sent: g.Sent(), Inbox: g.Inbox(),
@@ -111,7 +79,22 @@ func BuildView(g *game.Game, debug bool, highlight string) PlayerView {
 		}
 		v.Generals = append(v.Generals, gv)
 	}
-	v.Map = buildMap(g.Map, v, highlight, g)
+	marked := map[string]bool{}
+	if highlight != "" {
+		if l, ok := g.InboxLetter(highlight); ok {
+			for _, id := range l.Mentions {
+				marked[id] = true
+			}
+		}
+	}
+	var gens []tokenSource
+	for _, gv := range v.Generals {
+		gens = append(gens, tokenSource{Name: gv.Name, Province: gv.Province, AsOf: gv.AsOfTurn,
+			Destroyed: gv.Destroyed, Delay: gv.CourierDelay})
+	}
+	v.Map = BeliefMap(g.Map, &v.Belief, v.Turn, gens, MapOptions{
+		Marked: marked, Highlight: highlight, Interactive: true, Routes: routes,
+	})
 	if debug {
 		v.Debug = map[string]*DebugView{}
 		for _, l := range v.Inbox {
@@ -121,64 +104,6 @@ func BuildView(g *game.Game, debug bool, highlight string) PlayerView {
 		}
 	}
 	return v
-}
-
-func buildMap(m *mapdata.Map, v PlayerView, highlight string, g *game.Game) MapView {
-	mv := MapView{Highlight: highlight}
-	marked := map[string]bool{}
-	if highlight != "" {
-		if l, ok := g.InboxLetter(highlight); ok {
-			for _, id := range l.Mentions {
-				marked[id] = true
-			}
-		}
-	}
-	for _, e := range m.Edges {
-		a, b := m.Province(e[0]), m.Province(e[1])
-		mv.Roads = append(mv.Roads, Road{a.Pos[0], a.Pos[1], b.Pos[0], b.Pos[1]})
-	}
-	for _, p := range m.Provinces {
-		e := v.Belief.Provinces[p.ID]
-		pm := ProvinceMark{
-			ID: p.ID, Name: p.Name, X: p.Pos[0], Y: p.Pos[1],
-			Owner: string(e.LastKnownOwner), Supply: p.Supply, Capital: p.Capital,
-			Badge: fmt.Sprintf("T%d", e.AsOfTurn), Highlight: marked[p.ID],
-			Stale: v.Turn-e.AsOfTurn > 3,
-		}
-		title := []string{fmt.Sprintf("%s (%s) — last known %s, as of turn %d", p.Name, p.Terrain, e.LastKnownOwner, e.AsOfTurn)}
-		if e.EnemyStrength != nil {
-			pm.Enemy = fmt.Sprint(*e.EnemyStrength * report.MenPerStrength)
-			if e.EnemyEstimate {
-				pm.Enemy = "~" + pm.Enemy
-			}
-			title = append(title, "enemy reported: "+pm.Enemy+" men")
-		}
-		pm.Title = strings.Join(title, "\n")
-		mv.Provinces = append(mv.Provinces, pm)
-	}
-	// General tokens at their last reported location, fading with age.
-	byProvince := map[string][]GeneralView{}
-	for _, gv := range v.Generals {
-		if gv.Destroyed || gv.Province == "" {
-			continue
-		}
-		byProvince[gv.Province] = append(byProvince[gv.Province], gv)
-	}
-	for pid, gens := range byProvince {
-		p := m.Province(pid)
-		for i, gv := range gens {
-			age := v.Turn - gv.AsOfTurn
-			mv.Tokens = append(mv.Tokens, Token{
-				X:        p.Pos[0] - 13*float64(len(gens)-1) + 26*float64(i),
-				Y:        p.Pos[1],
-				Initials: initials(gv.Name),
-				Opacity:  math.Max(0.35, 1-0.15*float64(age-1)),
-				Title:    fmt.Sprintf("%s, reported here as of turn %d", gv.Name, gv.AsOfTurn),
-			})
-		}
-	}
-	sort.Slice(mv.Tokens, func(i, j int) bool { return mv.Tokens[i].Title < mv.Tokens[j].Title })
-	return mv
 }
 
 // DebugView is the truth behind one report, for the debug drawer.
@@ -208,6 +133,7 @@ type InterpView struct {
 	Step       string
 	Outcome    string
 	Order      string
+	Rationale  string
 	Error      string
 }
 
@@ -264,7 +190,7 @@ func buildDebug(g *game.Game, d *game.TurnDebug) *DebugView {
 		iv := InterpView{
 			LetterID: in.LetterID, Engagement: in.Parsed.Engagement, Addressed: in.Parsed.Addressed,
 			Plausible: in.Parsed.Plausible, Draw: in.RNGDraw, Step: in.Step, Outcome: in.Outcome,
-			Order: describe(in.Order, m), Error: in.Error,
+			Order: describe(in.Order, m), Rationale: in.Rationale, Error: in.Error,
 		}
 		if l := g.DebugLetter(in.LetterID); l != nil {
 			iv.Letter, iv.SentTurn = l.Body, l.SentTurn

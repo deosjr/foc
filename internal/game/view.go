@@ -213,3 +213,24 @@ func (g *Game) DebugLetter(id string) *LetterRecord {
 	}
 	return nil
 }
+
+// Snapshots returns belief and truth at the start and after every turn.
+// For the after-action review only.
+func (g *Game) Snapshots() []Snapshot { return g.snapshots }
+
+// DebugTurn returns the truth behind a general's turn. For review/debug only.
+func (g *Game) DebugTurn(generalID string, turn int) *TurnDebug {
+	return g.debug[debugKey(generalID, turn)]
+}
+
+// Letters returns every letter record, including undelivered and
+// intercepted ones. For review/debug only.
+func (g *Game) Letters() []*LetterRecord { return g.letters }
+
+// GeneralName returns a general's display name.
+func (g *Game) GeneralName(id string) string {
+	if gen := g.generals[id]; gen != nil {
+		return gen.Name
+	}
+	return id
+}

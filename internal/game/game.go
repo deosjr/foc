@@ -78,6 +78,7 @@ type Game struct {
 	generalOrder []string
 	questions    *interpret.QuestionSet
 	writer       *report.Writer
+	rationales   *report.RationaleWriter
 	enemy        *enemy.Scripted
 	decision     decision.Model
 	log          *runlog.Log
@@ -91,6 +92,18 @@ type Game struct {
 	standingSource map[string]string
 	gone           map[string]bool // generals whose army has been destroyed (truth)
 	debug          map[string]*TurnDebug
+	snapshots      []Snapshot // end of each turn; index 0 is the start
+}
+
+// Snapshot is belief and truth as they stood at the end of a turn.
+type Snapshot struct {
+	Turn   int
+	Belief *report.Belief
+	Truth  *engine.GameState
+}
+
+func (g *Game) snapshot(turn int) {
+	g.snapshots = append(g.snapshots, Snapshot{Turn: turn, Belief: g.belief.Clone(), Truth: g.state.Clone()})
 }
 
 func stream(seed uint64, name string) *rand.Rand {
@@ -126,6 +139,14 @@ func New(o Options) (*Game, error) {
 	if err != nil {
 		return nil, err
 	}
+	var rationales *report.RationaleWriter
+	if cfg.Interpretation.Rationale {
+		rp, err := report.LoadPrompts(filepath.Join(cfg.Prompts, "rationale.tmpl"))
+		if err != nil {
+			return nil, err
+		}
+		rationales = &report.RationaleWriter{LLM: o.LLM, Prompts: rp, MaxTokens: cfg.LLM.MaxTokens, Temperature: cfg.LLM.Temperature}
+	}
 	if o.Log == nil {
 		o.Log = runlog.New()
 	}
@@ -140,6 +161,7 @@ func New(o Options) (*Game, error) {
 		questions:      qs,
 		enemy:          enemy.NewScripted(scn.EnemyRoutes),
 		decision:       o.Decision,
+		rationales:     rationales,
 		log:            o.Log,
 		runDir:         o.RunDir,
 		rngMessaging:   stream(cfg.Seed, "messaging"),
@@ -184,6 +206,7 @@ func New(o Options) (*Game, error) {
 		MaxTokens:   cfg.LLM.MaxTokens,
 		Temperature: cfg.LLM.Temperature,
 	}
+	g.snapshot(0)
 	g.log.SetPhase(0, "setup")
 	g.log.Add("start", map[string]any{"seed": cfg.Seed, "scenario": scn.Name, "state": g.state})
 	return g, nil
@@ -415,8 +438,41 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 			written[i] = g.writer.Write(ctx, g.generals[gid], facts[gid])
 		}(i, gid)
 	}
+	// Private rationales for the review, written alongside the reports.
+	rationaleErrs := make([]error, len(arriving))
+	if g.rationales != nil {
+		for i, l := range arriving {
+			in := l.Interpretation
+			if in == nil || in.Error != "" {
+				continue
+			}
+			order := orders[l.To] // an ignored letter: he carried on as before
+			if in.Order != nil {
+				order = *in.Order
+			}
+			rf := report.RationaleFacts{
+				General: g.generals[l.To].Name, Location: g.Map.NameOf(obs[l.To].Start), Letter: l.Body,
+				SentTurn: l.SentTurn, Decision: interpret.DescribeOrder(order, g.Map),
+				Reading: report.Reading(in.Outcome, in.Step),
+			}
+			wg.Add(1)
+			go func(i int, in *interpret.Interpretation, gen *model.General, rf report.RationaleFacts) {
+				defer wg.Done()
+				in.Rationale, rationaleErrs[i] = g.rationales.Write(ctx, gen, rf)
+			}(i, in, g.generals[l.To], rf)
+		}
+	}
 	wg.Wait()
 	g.log.Flush()
+	for i, l := range arriving {
+		if in := l.Interpretation; in != nil && (in.Rationale != "" || rationaleErrs[i] != nil) {
+			rec := map[string]any{"letter": l.ID, "general": l.To, "rationale": in.Rationale}
+			if rationaleErrs[i] != nil {
+				rec["error"] = rationaleErrs[i].Error()
+			}
+			g.log.Add("rationale", rec)
+		}
+	}
 	for i, gid := range active {
 		f, w := facts[gid], written[i]
 		seq := g.nextSeq()
@@ -461,6 +517,7 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 		g.log.Add("deliver", map[string]any{"letter": l.ID, "from": l.From, "written": l.SentTurn})
 	}
 
+	g.snapshot(T)
 	if g.state.Over {
 		g.log.Add("game-over", map[string]any{"winner": g.state.Winner, "outcome": g.state.Outcome})
 		progress("done")

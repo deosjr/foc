@@ -101,3 +101,26 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; }
 .debug pre { white-space: pre-wrap; font-size: .75rem; background: #fff; padding: .4rem; border: 1px solid var(--rule); }
 .truth-page { padding: 1rem 1.5rem; }
 .truth-page pre { background: var(--panel); padding: 1rem; border: 1px solid var(--rule); }
+.route { fill: none; stroke: var(--accent); stroke-width: 3; stroke-dasharray: 8 6; opacity: .8; }
+.route-label { text-anchor: middle; font: 600 12px var(--sans); fill: var(--accent); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; }
+.token.side-enemy circle { fill: var(--enemy); }
+.review { padding: 1rem 1.2rem; max-width: 1500px; }
+.review-maps { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 900px) { .review-maps { grid-template-columns: 1fr; } }
+.review-maps figure { margin: 0; }
+.review-maps figcaption { color: var(--muted); font-size: .85rem; margin-bottom: .3rem; }
+.map.truth { border-color: var(--ink); }
+.turns { display: flex; gap: .8rem; }
+.review-general { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: .8rem 1rem; margin-top: 1rem; }
+.review-general h2 { color: var(--ink); font-size: 1.2rem; }
+.review-general h3 { font-size: .95rem; margin: .8rem 0 .3rem; color: var(--muted); }
+.review-general blockquote { margin: .2rem 0; font-family: var(--serif); white-space: pre-wrap; }
+.review-cols { display: grid; grid-template-columns: 1.3fr 1fr; gap: 1.2rem; font-size: .9rem; }
+@media (max-width: 900px) { .review-cols { grid-template-columns: 1fr; } }
+.review-cols .letter { margin: 0; }
+.review-cols table { border-collapse: collapse; }
+.review-cols td, .review-cols th { padding: .05rem .5rem .05rem 0; text-align: left; }
+.review-cols tr.chosen td { font-weight: 700; color: var(--accent); }
+.review-cols .tables { display: flex; flex-wrap: wrap; gap: .8rem; }
+.review-cols caption { text-align: left; font-weight: 600; color: var(--muted); }
+.rationale { font-family: var(--serif); font-style: italic; }

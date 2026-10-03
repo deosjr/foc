@@ -44,7 +44,7 @@ interpretation:
   clear_threshold: 0.8
   unclear_threshold: 0.4
   plausibility_threshold: 0.35
-  rationale: false
+  rationale: true      # one extra LLM call per letter read; shown only in the review
 
 report:
   min_words: 30       # the prompt asks for 80-180; validation is more lenient

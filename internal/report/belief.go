@@ -135,3 +135,22 @@ func (b *Belief) refresh() {
 		}
 	}
 }
+
+// Clone deep-copies the belief, for per-turn snapshots.
+func (b *Belief) Clone() *Belief {
+	c := &Belief{Provinces: map[string]*BeliefEntry{}, Generals: map[string]*GeneralBelief{}}
+	for id, e := range b.Provinces {
+		cp := *e
+		if e.EnemyStrength != nil {
+			n := *e.EnemyStrength
+			cp.EnemyStrength = &n
+		}
+		cp.FriendlyGenerals = append([]string(nil), e.FriendlyGenerals...)
+		c.Provinces[id] = &cp
+	}
+	for id, g := range b.Generals {
+		cp := *g
+		c.Generals[id] = &cp
+	}
+	return c
+}

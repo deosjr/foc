@@ -48,6 +48,7 @@ func Default() *Config {
 		Scenario: "scenarios/poc.yaml", Prompts: "prompts", RunsDir: "runs",
 	}
 	c.Interpretation.Thresholds = generals.Thresholds{Clear: 0.8, Unclear: 0.4, Plausibility: 0.35}
+	c.Interpretation.Rationale = true
 	c.Report.MinWords, c.Report.MaxWords = 30, 260
 	return c
 }

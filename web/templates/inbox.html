@@ -13,6 +13,10 @@
 </article>{{end}}
 
 {{define "debug"}}<details class="debug"><summary>Debug: how this came about</summary>
+{{template "debug-body" .}}
+</details>{{end}}
+
+{{define "debug-body"}}
   <p><b>Order carried out:</b> {{.Order}} <i>({{.OrderSource}})</i></p>
   {{range .Interpretations}}<div class="interp">
     <p><b>Letter {{.LetterID}}</b>, sent turn {{.SentTurn}}:</p>
@@ -25,6 +29,7 @@
       {{if .Reweighted}}<table><caption>Reweighted</caption>{{range .Reweighted}}<tr{{if .Chosen}} class="chosen"{{end}}><td>{{.Key}}</td><td>×{{f2 .Weight}}</td><td>{{pct .P}}</td></tr>{{end}}</table>{{end}}
     </div>
     <p>draw {{f2 .Draw}} → step <b>{{.Step}}</b> → {{.Outcome}}: {{.Order}}</p>
+    {{if .Rationale}}<p class="rationale">“{{.Rationale}}”</p>{{end}}
   </div>{{end}}
   {{if .Rows}}<table class="distort"><caption>Distortion</caption>
     <tr><th></th><th>true</th><th>seen</th><th>reported</th></tr>
@@ -33,4 +38,4 @@
   <p>Report: {{.Attempts}} attempt{{if ne .Attempts 1}}s{{end}}{{if .FellBack}}, <b class="warn">fell back to the template letter</b>{{end}}{{if .Error}}, error: {{.Error}}{{end}}</p>
   {{range .Violations}}<p class="warn">Rejected: {{join .}}</p>{{end}}
   <details><summary>Facts given to the LLM</summary><pre>{{.FactsJSON}}</pre></details>
-</details>{{end}}
+{{end}}

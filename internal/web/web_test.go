@@ -189,7 +189,7 @@ func TestBeliefBoundary(t *testing.T) {
 				}
 			}
 		}
-		v := BuildView(g, false, "")
+		v := BuildView(g, false, "", false)
 		truth := g.DebugTruth()
 		g.Unlock()
 		if v.Debug != nil {
@@ -206,5 +206,52 @@ func TestBeliefBoundary(t *testing.T) {
 				t.Errorf("turn %d: view leaks enemy army %s", turn+1, a.ID)
 			}
 		}
+	}
+}
+
+func TestReview(t *testing.T) {
+	s, g := newServer(t, false)
+	if w := do(s, "GET", "/review", nil, false); w.Code != http.StatusForbidden {
+		t.Errorf("review before the end without --debug: %d, want 403", w.Code)
+	}
+	for i := 0; i < 10 && !g.Over(); i++ {
+		do(s, "POST", "/turn", url.Values{"draft-velk": {"March on Kethra."}, "draft-saris": {"Hold Duna Hills."}}, true)
+	}
+	if !g.Over() {
+		t.Fatal("game did not end")
+	}
+	w := do(s, "GET", "/review?turn=1", nil, false)
+	body := w.Body.String()
+	if w.Code != 200 || !strings.Contains(body, "What was true") || !strings.Contains(body, "March on Kethra.") {
+		t.Fatalf("review turn 1: %d", w.Code)
+	}
+	// The truth map shows the enemy commander; the player's view never does.
+	if !strings.Contains(body, "Orsk the Red") {
+		t.Error("truth map should name the enemy commander")
+	}
+	if !strings.Contains(body, "rationale") {
+		t.Error("review should show the general's rationale")
+	}
+	if w := do(s, "GET", "/review?turn=99", nil, false); w.Code != 200 {
+		t.Errorf("out-of-range turn should clamp: %d", w.Code)
+	}
+	if w := do(s, "GET", "/review?turn=x", nil, false); w.Code != 400 {
+		t.Errorf("bad turn: %d", w.Code)
+	}
+	d, _ := newServer(t, true)
+	if w := do(d, "GET", "/review?turn=0", nil, false); w.Code != 200 {
+		t.Errorf("review with --debug before the end: %d", w.Code)
+	}
+}
+
+func TestRouteOverlay(t *testing.T) {
+	s, _ := newServer(t, false)
+	plain := do(s, "GET", "/map", nil, true).Body.String()
+	routes := do(s, "GET", "/map?routes=1", nil, true).Body.String()
+	if strings.Contains(plain, "<polyline") || !strings.Contains(routes, `class="route"`) {
+		t.Error("route overlay should appear only with routes=1")
+	}
+	if !strings.Contains(routes, "to DV") || !strings.Contains(routes, "to IS") {
+		t.Error("route labels missing")
 	}
 }

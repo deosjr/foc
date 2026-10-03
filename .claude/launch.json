@@ -6,6 +6,12 @@
       "runtimeExecutable": "go",
       "runtimeArgs": ["run", "./cmd/foc", "--debug", "--addr", "127.0.0.1:8080"],
       "port": 8080
+    },
+    {
+      "name": "foc-mock",
+      "runtimeExecutable": "go",
+      "runtimeArgs": ["run", "./cmd/foc", "--config", "config.example.yaml", "--debug", "--addr", "127.0.0.1:8082"],
+      "port": 8082
     }
   ]
 }

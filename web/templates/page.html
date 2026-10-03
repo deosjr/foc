@@ -26,6 +26,7 @@
   <span id="spinner" class="spinner" role="status">Couriers riding, generals reading…</span>
   {{end}}
   <span class="spacer"></span>
+  {{if or .Over .DebugMode}}<a class="truth" href="/review" target="_blank" rel="noopener">after-action review</a>{{end}}
   {{if .DebugMode}}<a class="truth" href="/debug/truth" target="_blank" rel="noopener">truth</a>{{end}}
   <button class="save" hx-post="/save" hx-target="#notice">Save run</button>
   <span id="notice" class="notice"></span>

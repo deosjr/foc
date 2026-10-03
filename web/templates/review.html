@@ -1,0 +1,46 @@
+{{define "review"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>After-action review · Fog of Command</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="review-page">
+<header class="bar">
+  <h1>After-action review</h1>
+  <div class="when">{{if eq .Turn 0}}Before the campaign{{else}}Turn {{.Turn}} · {{.Season}}{{end}}</div>
+  <nav class="turns">
+    {{if .HasPrev}}<a href="/review?turn={{.Prev}}">← turn {{.Prev}}</a>{{end}}
+    {{if .HasNext}}<a href="/review?turn={{.Next}}">turn {{.Next}} →</a>{{end}}
+  </nav>
+  <span class="spacer"></span>
+  {{if .Over}}<span class="outcome">{{.Outcome}}</span>{{else}}<span class="notice">The campaign is still under way (debug mode).</span>{{end}}
+  <a href="/">back to the game</a>
+</header>
+<main class="review">
+  <div class="review-maps">
+    <figure><figcaption>What you believed at the end of the turn</figcaption>{{template "mapsvg" .Belief}}</figure>
+    <figure><figcaption>What was true</figcaption>{{template "mapsvg" .Truth}}</figure>
+  </div>
+  {{if eq .Turn 0}}<p class="hint">The starting position. Step forward to see each turn.</p>{{end}}
+  {{range .Generals}}<section class="review-general">
+    <h2>{{.Name}}</h2>
+    <div class="review-cols">
+      <div>
+        <h3>Your letters this turn</h3>
+        {{range .Sent}}<blockquote>{{.Body}}</blockquote><p class="stamp">{{.Fate}}</p>
+        {{else}}<p class="hint">You did not write to him this turn.</p>{{end}}
+        {{with .Debug}}<h3>What he did, and why</h3>{{template "debug-body" .}}{{end}}
+        {{if .TrueOutcome}}<h3>What truly happened</h3><p>{{.TrueOutcome}}</p>{{end}}
+      </div>
+      <div>
+        <h3>His report</h3>
+        {{if .Report}}<div class="letter"><div class="body">{{.Report}}</div><p class="stamp">{{.ReportFate}}</p></div>
+        {{else}}<p class="hint">No report this turn.</p>{{end}}
+      </div>
+    </div>
+  </section>{{end}}
+</main>
+</body>
+</html>{{end}}
