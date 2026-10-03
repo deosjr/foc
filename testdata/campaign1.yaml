@@ -1,0 +1,14 @@
+# A scripted campaign for the end-to-end test: letters per turn, by general id.
+turns:
+  - velk: March on Hollow Wood and drive the enemy from it.
+    saris: Hold Duna Hills. Do not let them pass.
+  - {}
+  - velk: Take Marren and hold it.
+  - saris: Advance to Hollow Wood, but be careful and preserve your men.
+  - {}
+  - velk: Press on toward Sarnos and seize it.
+    saris: Stay where you are.
+  - {}
+  - velk: The gods smile on us. Strike at Kethra itself!
+  - {}
+  - saris: Fall back if they come for you.

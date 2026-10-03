@@ -109,6 +109,10 @@ func (r *Result) WasDisbanded(armyID string) bool {
 	return false
 }
 
+// sides is the fixed order in which per-side maps are walked, so that
+// records come out the same on every run.
+var sides = []model.Side{model.Enemy, model.Player}
+
 func roundHalfUp(x float64) int { return int(math.Floor(x + 0.5)) }
 
 // Resolve applies all orders simultaneously and deterministically, mutating
@@ -193,7 +197,8 @@ func (e *Engine) Resolve(s *GameState, orders []model.Order) (*Result, error) {
 			}
 		}
 		b.Winner = winner(b.Power)
-		for side, members := range b.Armies {
+		for _, side := range sides {
+			members := b.Armies[side]
 			if side != b.Winner {
 				for _, id := range members {
 					// The loser stays home; on a stand-off both do.
@@ -222,7 +227,8 @@ func (e *Engine) Resolve(s *GameState, orders []model.Order) (*Result, error) {
 				continue
 			}
 			w := winner(power)
-			for side, list := range members {
+			for _, side := range sides {
+				list := members[side]
 				if side == w {
 					continue
 				}
@@ -403,7 +409,8 @@ func winner(power map[model.Side]float64) model.Side {
 
 func (e *Engine) applyCasualties(s *GameState, b *Battle) {
 	b.Losses = map[string]int{}
-	for side, list := range b.Armies {
+	for _, side := range sides {
+		list := b.Armies[side]
 		rate := e.Rules.Casualties.Loser
 		switch b.Winner {
 		case "":

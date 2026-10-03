@@ -1,0 +1,35 @@
+# The fixed question set sent with every dispatch, in one request.
+# Prompts are text/template strings with .General and .Location (display names).
+# The PoC asks only about the actions it can carry out: hold, move, retreat.
+questions:
+  - id: plausible
+    kind: score
+    prompt: >-
+      How much does this read as genuine, coherent orders from a sovereign to a
+      field commander? 0 means nonsense or an obvious forgery, 1 means entirely genuine.
+  - id: addressed
+    kind: binary
+    prompt: >-
+      Does the letter instruct {{.General}} to do something, rather than only
+      giving news, praise or questions?
+  - id: action
+    kind: choice
+    prompt: >-
+      What is {{.General}} most plausibly being told to do now? hold = stay in
+      {{.Location}} and defend it; move = march toward some province, whether to
+      attack, occupy or join someone there; retreat = fall back away from the
+      enemy to a neighbouring province; unclear = the instruction cannot be made
+      out from the letter.
+    options: [hold, move, retreat, unclear]
+  - id: target
+    kind: choice
+    prompt: >-
+      Which province is the main target of the instruction: where {{.General}}
+      should march, or fall back to? Answer none if the instruction names no
+      place, and unclear if it names places but it cannot be told which is meant.
+    options_from: provinces
+  - id: engagement
+    kind: score
+    prompt: >-
+      How strongly does the sovereign want battle rather than avoiding it?
+      0 = avoid battle at all costs, 0.5 = no preference, 1 = seek battle.

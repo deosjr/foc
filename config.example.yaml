@@ -1,0 +1,38 @@
+# Offline configuration: both providers are mocks, so this runs with no
+# network and no API keys. Copy to config.yaml and edit to use real models.
+seed: 42
+mode: live            # live | record | replay
+replay_file: ""
+cache_file: ""        # e.g. .cache/responses.jsonl to cache real model calls during development
+
+decision:
+  provider: mock      # mock | llm
+  timeout: 10s
+
+llm:
+  provider: mock      # mock | anthropic | openaicompat
+  # To use Claude:  provider: anthropic, model: claude-sonnet-5, api_key_env: ANTHROPIC_API_KEY
+  # To use Ollama:  provider: openaicompat, model: llama3.1, endpoint: http://localhost:11434/v1
+  model: ""
+  endpoint: ""
+  api_key_env: ""
+  temperature: 0.8
+  max_tokens: 400
+  timeout: 30s
+
+interpretation:
+  clear_threshold: 0.8
+  unclear_threshold: 0.4
+  plausibility_threshold: 0.35
+  rationale: false
+
+report:
+  min_words: 30       # the prompt asks for 80-180; validation is more lenient
+  max_words: 260
+
+ruleset: rulesets/ancient.yaml
+map: maps/valley.json
+generals: content/generals.yaml
+scenario: scenarios/poc.yaml
+prompts: prompts
+runs_dir: runs
