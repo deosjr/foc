@@ -145,6 +145,9 @@ func menNotes(f ReportFacts, per int) []string {
 	}
 	say := func(what string, n int) string { return fmt.Sprintf("%s %d = %s", what, n, men(n)) }
 	notes := []string{say("own_strength", f.OwnStrength), say("own_losses", f.OwnLosses)}
+	if f.Reinforcements > 0 {
+		notes = append(notes, say("reinforcements", f.Reinforcements))
+	}
 	for _, b := range f.Battles {
 		notes = append(notes, say("enemy_losses at "+b.Place, b.EnemyLosses))
 	}

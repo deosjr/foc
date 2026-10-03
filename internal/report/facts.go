@@ -17,6 +17,7 @@ type ReportFacts struct {
 	OrderOutcome     string          `json:"order_outcome"`
 	OwnStrength      int             `json:"own_strength"`
 	OwnLosses        int             `json:"own_losses"`
+	Reinforcements   int             `json:"reinforcements,omitempty"` // winter levies that joined
 	Battles          []BattleFacts   `json:"battles,omitempty"`
 	RetreatedTo      string          `json:"retreated_to,omitempty"`
 	ArmyDestroyed    bool            `json:"army_destroyed,omitempty"`
@@ -70,7 +71,7 @@ type ContactFacts struct {
 
 // Numbers returns every integer stated in the facts.
 func (f ReportFacts) Numbers() []int {
-	nums := []int{f.WrittenTurn, f.OwnStrength, f.OwnLosses}
+	nums := []int{f.WrittenTurn, f.OwnStrength, f.OwnLosses, f.Reinforcements}
 	if f.Clarification != nil {
 		nums = append(nums, f.Clarification.LetterSentTurn)
 	}

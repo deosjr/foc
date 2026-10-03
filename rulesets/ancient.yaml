@@ -22,5 +22,9 @@ distortion:
   vanity_enemy: 0.6        # reported enemy losses = observed * (1 + vanity_enemy * vanity)
   omission: 0.6            # each piece of bad news is left out with p = omission * (1 - honesty)
 victory:
-  supply_centres_to_win: 4
+  supply_centres_to_win: 5  # all of them: in the valley, effectively "take Kethra and hold it"
+  hold_turns: 2            # a winning position must still stand at the end of the next turn
+musters:
+  every: 4                 # each winter (every fourth turn)...
+  per_centre: 3            # ...each side raises 300 men per supply centre it holds
 seasons: [Spring, Summer, Autumn, Winter]

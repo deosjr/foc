@@ -251,7 +251,17 @@ type Ruleset struct {
 	} `yaml:"distortion"`
 	Victory struct {
 		SupplyCentresToWin int `yaml:"supply_centres_to_win"`
+		// HoldTurns is how many consecutive turn ends a side must meet its
+		// victory condition (taking the other capital, or enough supply
+		// centres) before it wins. Default 1.
+		HoldTurns int `yaml:"hold_turns"`
 	} `yaml:"victory"`
+	// Musters: every Every turns, each side gains PerCentre strength for
+	// every supply centre it holds. 0 disables.
+	Musters struct {
+		Every     int `yaml:"every"`
+		PerCentre int `yaml:"per_centre"`
+	} `yaml:"musters"`
 	Seasons []string `yaml:"seasons"`
 }
 
@@ -272,6 +282,9 @@ func LoadRuleset(path string) (*Ruleset, error) {
 	}
 	if r.MenPerStrength < 1 {
 		r.MenPerStrength = 1
+	}
+	if r.Victory.HoldTurns < 1 {
+		r.Victory.HoldTurns = 1
 	}
 	return &r, nil
 }

@@ -86,6 +86,26 @@ type Result struct {
 	Disbanded []string            `json:"disbanded"`
 	Captures  []Capture           `json:"captures"`
 	Supports  []SupportResult     `json:"supports"`
+	Musters   []Muster            `json:"musters,omitempty"`
+}
+
+// Muster is the strength a side raised in winter and where it went.
+type Muster struct {
+	Side     model.Side `json:"side"`
+	Army     string     `json:"army"` // the army reinforced or newly raised
+	Strength int        `json:"strength"`
+	Raised   bool       `json:"raised"` // a new army, raised in the capital
+}
+
+// MusteredInto returns how much strength an army gained from musters.
+func (r *Result) MusteredInto(armyID string) int {
+	n := 0
+	for _, m := range r.Musters {
+		if m.Army == armyID {
+			n += m.Strength
+		}
+	}
+	return n
 }
 
 // SupportOf returns what became of an army's Support order, if it gave one.
@@ -415,7 +435,48 @@ func (e *Engine) Resolve(s *GameState, orders []model.Order) (*Result, error) {
 			}
 		}
 	}
+	res.Musters = e.muster(s)
 	return res, nil
+}
+
+// muster raises winter levies: every Musters.Every turns, each side gains
+// PerCentre strength per supply centre it holds. The player's levies join
+// the army nearest Karsa; the enemy's join the army in its capital, or form
+// a new army there if the capital is its own but empty.
+func (e *Engine) muster(s *GameState) []Muster {
+	every, per := e.Rules.Musters.Every, e.Rules.Musters.PerCentre
+	if every <= 0 || per <= 0 || s.Turn%every != 0 {
+		return nil
+	}
+	var out []Muster
+	for _, side := range []model.Side{model.Enemy, model.Player} {
+		owned, _ := s.SupplyCount(side)
+		if owned == 0 {
+			continue
+		}
+		amount := owned * per
+		capital := e.Map.Capital(side)
+		best, bestD := "", -1
+		for _, id := range s.ArmyIDs() {
+			a := s.Armies[id]
+			if a.Side != side {
+				continue
+			}
+			if d := e.Map.Distance(a.Location, capital); bestD < 0 || d < bestD {
+				best, bestD = id, d
+			}
+		}
+		switch {
+		case side == model.Enemy && bestD != 0 && s.Provinces[capital].Owner == side && len(s.ArmiesIn(capital)) == 0:
+			id := fmt.Sprintf("e-levy-%d", s.Turn)
+			s.Armies[id] = &Army{ID: id, Side: side, Location: capital, Strength: amount, Commander: "the Levy of " + s.Provinces[capital].Name}
+			out = append(out, Muster{Side: side, Army: id, Strength: amount, Raised: true})
+		case best != "":
+			s.Armies[best].Strength += amount
+			out = append(out, Muster{Side: side, Army: best, Strength: amount})
+		}
+	}
+	return out
 }
 
 func (e *Engine) validate(s *GameState, a *Army, o model.Order) error {

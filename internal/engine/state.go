@@ -39,6 +39,7 @@ type GameState struct {
 	Provinces map[string]*Province   `json:"provinces"`
 	Armies    map[string]*Army       `json:"armies"`
 	Standing  map[string]model.Order `json:"standing"` // by general id
+	Streak    map[model.Side]int     `json:"streak"`   // consecutive turn ends each side has met its victory condition
 	Over      bool                   `json:"over"`
 	Winner    model.Side             `json:"winner"`
 	Outcome   string                 `json:"outcome"`
@@ -90,6 +91,10 @@ func (s *GameState) Clone() *GameState {
 	for k, v := range s.Armies {
 		a := *v
 		c.Armies[k] = &a
+	}
+	c.Streak = map[model.Side]int{}
+	for k, v := range s.Streak {
+		c.Streak[k] = v
 	}
 	c.Standing = make(map[string]model.Order, len(s.Standing))
 	for k, v := range s.Standing {
@@ -143,8 +148,13 @@ func (s *GameState) SupplyCount(side model.Side) (owned, total int) {
 }
 
 // Evaluate checks for victory or defeat after a turn has resolved, and for
-// the turn cap. It sets Over, Winner and Outcome.
+// the turn cap. A side wins when it has met its condition (the other
+// capital, or for the player enough supply centres) at the end of
+// hold_turns consecutive turns. Losing every army ends the game at once.
 func (e *Engine) Evaluate(s *GameState, turnCap int) {
+	if s.Streak == nil {
+		s.Streak = map[model.Side]int{}
+	}
 	playerCap := e.Map.Capital(model.Player)
 	enemyCap := e.Map.Capital(model.Enemy)
 	playerArmies := 0
@@ -154,19 +164,29 @@ func (e *Engine) Evaluate(s *GameState, turnCap int) {
 		}
 	}
 	owned, total := s.SupplyCount(model.Player)
+	enemyWins := s.Provinces[playerCap].Owner == model.Enemy
+	playerWins := s.Provinces[enemyCap].Owner == model.Player || owned >= e.Rules.Victory.SupplyCentresToWin
+	for side, met := range map[model.Side]bool{model.Enemy: enemyWins, model.Player: playerWins} {
+		if met {
+			s.Streak[side]++
+		} else {
+			s.Streak[side] = 0
+		}
+	}
+	hold := e.Rules.Victory.HoldTurns
 	switch {
-	case s.Provinces[playerCap].Owner != model.Player:
-		s.Over, s.Winner = true, model.Enemy
-		s.Outcome = fmt.Sprintf("%s has fallen to the enemy.", s.Provinces[playerCap].Name)
 	case playerArmies == 0:
 		s.Over, s.Winner = true, model.Enemy
 		s.Outcome = "All your armies have been destroyed."
-	case s.Provinces[enemyCap].Owner == model.Player:
+	case s.Streak[model.Enemy] >= hold:
+		s.Over, s.Winner = true, model.Enemy
+		s.Outcome = fmt.Sprintf("%s has fallen to the enemy.", s.Provinces[playerCap].Name)
+	case s.Streak[model.Player] >= hold && s.Provinces[enemyCap].Owner == model.Player:
 		s.Over, s.Winner = true, model.Player
-		s.Outcome = fmt.Sprintf("Your army has taken %s.", s.Provinces[enemyCap].Name)
-	case owned >= e.Rules.Victory.SupplyCentresToWin:
+		s.Outcome = fmt.Sprintf("Your army has taken %s and held it.", s.Provinces[enemyCap].Name)
+	case s.Streak[model.Player] >= hold:
 		s.Over, s.Winner = true, model.Player
-		s.Outcome = fmt.Sprintf("You hold %d of %d supply centres.", owned, total)
+		s.Outcome = fmt.Sprintf("You hold %d of %d supply centres, and have held them.", owned, total)
 	case s.Turn >= turnCap:
 		enemyOwned, _ := s.SupplyCount(model.Enemy)
 		s.Over = true

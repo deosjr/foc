@@ -21,6 +21,7 @@ Your orders as I understood them: {{.OrderUnderstood}} ({{.OrderSource}}). This 
 {{- range .Sightings}} {{if eq .Certainty "certain"}}There are {{men .EnemyStrength}} of the enemy in {{.Province}}.{{else}}I judge there are some {{men .EnemyStrength}} of the enemy in {{.Province}}.{{end}}{{end}}
 {{- if .NoEnemySeenIn}} I see no enemy in {{join .NoEnemySeenIn}}.{{end}}
 {{- range .FriendlyContacts}} {{.General}} is in {{.Province}}.{{end}}
+{{- if .Reinforcements}} The winter levies have joined us: {{men .Reinforcements}}.{{end}}
 {{- if .WatchFired}} {{.WatchFired}}.{{end}}
 {{- if .Watching}} As you bade me, {{.Watching}}.{{end}}
 {{- if .Refused}} I did not {{.RefusedOrder}}; I judged it would cost us the army.{{end}}

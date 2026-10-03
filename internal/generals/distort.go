@@ -75,6 +75,7 @@ func Distort(obs engine.Observation, g *model.General, rc ReportContext) (report
 		f.RetreatedTo = name(obs.RetreatedTo)
 	}
 	f.OrderOutcome = outcome(obs, rc)
+	f.Reinforcements = obs.Reinforced
 	if obs.Entrenched > 0 {
 		f.EntrenchedTurns = obs.Entrenched
 	}

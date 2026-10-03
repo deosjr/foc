@@ -136,9 +136,11 @@ The toy ships one small map, three player generals, two enemy armies and a fully
 7. A dislodged defender retreats to the adjacent province with no enemy army that is closest to its own capital (ties broken by province id), never into a province its attackers came from, or disbands if none exists.
 8. A province's owner changes when an army ends the turn in it unopposed.
 
-**Victory.** The player wins by taking Kethra or holding four of the five supply centres at the end of a turn. The player loses if Karsa falls or all armies are destroyed. Turn 20 ends the game with a score by supply centres held.
+**Victory.** The player wins by taking Kethra or holding the required number of supply centres (now all five, so in practice Kethra), and still holding it at the end of the next turn. The player loses if the enemy takes Karsa and still holds it at the end of the next turn, or at once if all armies are destroyed. Turn 20 ends the game with a score by supply centres held. *(Changed after balance testing with `foc sim`: winning on the first turn a condition was met ended games around turn 8.)*
 
-**Enemy AI.** A few lines of heuristics, deliberately dumb: if an enemy army is adjacent to Kethra and Kethra is empty, move back to defend; otherwise move toward the nearest player-owned or neutral supply centre; support the other enemy army if it is attacking an adjacent province. The AI sees true state.
+**Winter musters.** Every fourth turn, each side raises 300 men per supply centre it holds. The player's levies join the army nearest Karsa (and its general reports them); the enemy's join the army in Kethra, or form a new army there if Kethra is its own but empty.
+
+**Enemy AI.** A few lines of heuristics that see the true state: garrison Kethra while a player army is within two provinces of it; attack a neighbouring player army only when the attack, with supports from free neighbours, beats its defence; when outnumbered, dig in on its own supply centre or fall back to the nearest one; take empty supply centres next to it and guard threatened ones; otherwise march on the nearest supply centre it lacks. *(Revised after balance testing: the first version threw its field army at stronger forces and left Sarnos empty.)*
 
 ## Generals and personality
 

@@ -53,17 +53,50 @@ type AI interface {
 	Orders(s *engine.GameState) []model.Order
 }
 
-// Heuristic is the deliberately dumb enemy from the spec:
-//   - If no army holds the capital, the lowest-id army next to it moves in;
-//     an army in the capital stays there, entrenched, as its garrison. (Read
-//     literally, "move back when it is empty" makes two armies take turns
-//     leaving and re-entering it.)
-//   - Every other army marches on the nearest supply centre it does not
-//     own, ties broken by province id.
-//   - An army supports another enemy army attacking a province next to it,
-//     where a player army stands, instead of marching itself.
+// Heuristic is a simple enemy that sees the true state. Each turn:
+//   - Garrison: an army in the capital stays there, dug in, while any player
+//     army is within two provinces of it; if the capital is empty and
+//     threatened, the nearest army goes back. (Winter musters raise a new
+//     army in an empty capital.)
+//   - Every other army, in id order:
+//     1. falls back toward the capital if the player armies next to it
+//     could beat it where it stands;
+//     2. attacks a neighbouring player army it can beat, counting half the
+//     strength of free fellow armies that are next to the fight (they
+//     then support it);
+//     3. takes an empty supply centre next to it, or guards one of its own
+//     that a player army is next to;
+//     4. otherwise marches on the nearest supply centre it does not hold,
+//     unless the next step holds a player army it cannot beat, in which
+//     case it digs in.
 type Heuristic struct {
 	Map *mapdata.Map
+	// EntrenchBonus is the ruleset's bonus for a dug-in defender, used when
+	// judging fights. Zero means 0.25.
+	EntrenchBonus float64
+}
+
+func (h *Heuristic) bonus() float64 {
+	if h.EntrenchBonus == 0 {
+		return 0.25
+	}
+	return h.EntrenchBonus
+}
+
+// defence is what a side's armies in p would put up against an attack.
+func (h *Heuristic) defence(s *engine.GameState, p string, side model.Side) float64 {
+	total := 0.0
+	for _, a := range s.ArmiesIn(p) {
+		if a.Side != side {
+			continue
+		}
+		mult := h.Map.Defence(p)
+		if a.Entrenched >= 1 { // will be dug in by the time we arrive
+			mult += h.bonus()
+		}
+		total += float64(a.Strength) * mult
+	}
+	return total
 }
 
 func (h *Heuristic) Orders(s *engine.GameState) []model.Order {
@@ -74,67 +107,161 @@ func (h *Heuristic) Orders(s *engine.GameState) []model.Order {
 		}
 	}
 	sort.Strings(ids)
-	capital := h.Map.Capital(model.Enemy)
+	m := h.Map
+	capital := m.Capital(model.Enemy)
 	orders := map[string]model.Order{}
+	nearCapital := false
+	for _, a := range s.Armies {
+		if a.Side == model.Player && m.Distance(a.Location, capital) <= 2 {
+			nearCapital = true
+		}
+	}
 
+	// Garrison.
 	garrisoned := false
 	for _, id := range ids {
-		if s.Armies[id].Location == capital && !garrisoned {
+		if s.Armies[id].Location == capital && nearCapital && !garrisoned {
 			orders[id] = model.Order{ArmyID: id, Type: model.Entrench}
 			garrisoned = true
 		}
 	}
-	if !garrisoned {
+	if nearCapital && !garrisoned && len(s.ArmiesIn(capital)) == 0 {
+		best, bestD := "", -1
 		for _, id := range ids {
-			if h.Map.Adjacent(s.Armies[id].Location, capital) {
-				orders[id] = model.Order{ArmyID: id, Type: model.MoveToward, Target: capital}
-				break
+			if d := m.Distance(s.Armies[id].Location, capital); bestD < 0 || d < bestD {
+				best, bestD = id, d
 			}
 		}
+		if best != "" {
+			orders[best] = model.Order{ArmyID: best, Type: model.MoveToward, Target: capital}
+		}
+	}
+
+	free := func(id string) bool { _, done := orders[id]; return !done }
+	playerIn := func(p string) bool {
+		for _, a := range s.ArmiesIn(p) {
+			if a.Side == model.Player {
+				return true
+			}
+		}
+		return false
 	}
 	for _, id := range ids {
-		if _, done := orders[id]; done {
+		if !free(id) {
 			continue
 		}
 		a := s.Armies[id]
+		here := a.Location
+
+		// 1. Opportunity: a neighbouring player army we can beat.
+		bestP, bestMargin := "", 0.0
+		var bestHelpers []string
+		for _, n := range m.Neighbours(here) {
+			if !playerIn(n) {
+				continue
+			}
+			power := float64(a.Strength)
+			var helpers []string
+			for _, other := range ids {
+				o := s.Armies[other]
+				if other != id && free(other) && m.Adjacent(o.Location, n) {
+					power += 0.5 * float64(o.Strength)
+					helpers = append(helpers, other)
+				}
+			}
+			if margin := power - h.defence(s, n, model.Player); margin > bestMargin {
+				bestP, bestMargin, bestHelpers = n, margin, helpers
+			}
+		}
+		if bestP != "" {
+			orders[id] = model.Order{ArmyID: id, Type: model.MoveToward, Target: bestP}
+			for _, hlp := range bestHelpers {
+				orders[hlp] = model.Order{ArmyID: hlp, Type: model.Support, SupportArmyID: id}
+			}
+			continue
+		}
+
+		// 2. Danger: could the player armies next to us beat us here?
+		threat := 0.0
+		for _, n := range m.Neighbours(here) {
+			for _, x := range s.ArmiesIn(n) {
+				if x.Side == model.Player {
+					threat += float64(x.Strength)
+				}
+			}
+		}
+		mult := m.Defence(here)
+		if a.Entrenched >= 1 {
+			mult += h.bonus()
+		}
+		if threat > float64(a.Strength)*mult && here != capital {
+			// On one of our supply centres: dig in and hold it, unless the
+			// odds are hopeless even dug in.
+			if s.Provinces[here].Supply && s.Provinces[here].Owner == model.Enemy &&
+				threat <= float64(a.Strength)*(m.Defence(here)+h.bonus())*1.5 {
+				orders[id] = model.Order{ArmyID: id, Type: model.Entrench}
+				continue
+			}
+			// Otherwise fall back to the nearest supply centre of ours that
+			// no player army stands in.
+			refuge, refugeD := "", -1
+			for _, p := range m.IDs() {
+				prov := s.Provinces[p]
+				if !prov.Supply || prov.Owner != model.Enemy || p == here || playerIn(p) {
+					continue
+				}
+				if d := m.Distance(here, p); refugeD < 0 || d < refugeD {
+					refuge, refugeD = p, d
+				}
+			}
+			if refuge != "" && !playerIn(m.NextStep(here, refuge)) {
+				orders[id] = model.Order{ArmyID: id, Type: model.MoveToward, Target: refuge}
+				continue
+			}
+		}
+
+		// 3. Take an empty supply centre next door, or guard a threatened one.
+		took := false
+		for _, n := range m.Neighbours(here) {
+			prov := s.Provinces[n]
+			if !prov.Supply || len(s.ArmiesIn(n)) > 0 {
+				continue
+			}
+			threatened := false
+			for _, nn := range m.Neighbours(n) {
+				threatened = threatened || playerIn(nn)
+			}
+			if prov.Owner != model.Enemy || threatened {
+				orders[id] = model.Order{ArmyID: id, Type: model.MoveToward, Target: n}
+				took = true
+				break
+			}
+		}
+		if took {
+			continue
+		}
+
+		// 4. March on the nearest supply centre we lack, unless blocked.
 		best, bestD := "", -1
-		for _, p := range h.Map.IDs() {
+		for _, p := range m.IDs() {
 			prov := s.Provinces[p]
 			if !prov.Supply || prov.Owner == model.Enemy {
 				continue
 			}
-			if d := h.Map.Distance(a.Location, p); bestD < 0 || d < bestD {
+			if d := m.Distance(here, p); bestD < 0 || d < bestD {
 				best, bestD = p, d
 			}
 		}
 		if best == "" {
-			orders[id] = model.Order{ArmyID: id, Type: model.Hold}
+			orders[id] = model.Order{ArmyID: id, Type: model.Entrench}
+			continue
+		}
+		next := m.NextStep(here, best)
+		if playerIn(next) && h.defence(s, next, model.Player) >= float64(a.Strength) {
+			orders[id] = model.Order{ArmyID: id, Type: model.Entrench}
 			continue
 		}
 		orders[id] = model.Order{ArmyID: id, Type: model.MoveToward, Target: best}
-	}
-	// Supports: an army helps another's attack on a player army next door.
-	for _, id := range ids {
-		o := orders[id]
-		if o.Type != model.MoveToward || o.Target == capital {
-			continue
-		}
-		a := s.Armies[id]
-		for _, other := range ids {
-			oo := orders[other]
-			if other == id || oo.Type != model.MoveToward {
-				continue
-			}
-			into := h.Map.NextStep(s.Armies[other].Location, oo.Target)
-			playerThere := false
-			for _, x := range s.ArmiesIn(into) {
-				playerThere = playerThere || x.Side == model.Player
-			}
-			if playerThere && h.Map.Adjacent(a.Location, into) {
-				orders[id] = model.Order{ArmyID: id, Type: model.Support, SupportArmyID: other}
-				break
-			}
-		}
 	}
 	out := make([]model.Order, 0, len(ids))
 	for _, id := range ids {

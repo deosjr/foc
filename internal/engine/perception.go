@@ -51,7 +51,8 @@ type Observation struct {
 	Friendly    []Contact        `json:"friendly"`
 	Scouted     string           `json:"scouted,omitempty"`
 	Support     *SupportResult   `json:"support,omitempty"`
-	Entrenched  int              `json:"entrenched"` // consecutive turns dug in
+	Entrenched  int              `json:"entrenched"`           // consecutive turns dug in
+	Reinforced  int              `json:"reinforced,omitempty"` // winter levies that joined
 }
 
 func roundTo(x float64, step int) int {
@@ -91,8 +92,9 @@ func (e *Engine) Perceive(s *GameState, res *Result, generalID, armyID string, r
 		obs.Losses = start.Strength
 	} else {
 		obs.Location = a.Location
+		obs.Reinforced = res.MusteredInto(armyID)
 		obs.Strength = a.Strength
-		obs.Losses = start.Strength - a.Strength
+		obs.Losses = start.Strength + obs.Reinforced - a.Strength
 		obs.Entrenched = a.Entrenched
 	}
 

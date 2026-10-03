@@ -277,32 +277,76 @@ func TestResolveRejectsBadOrders(t *testing.T) {
 
 func TestEvaluate(t *testing.T) {
 	e := testEngine(t)
-	t.Run("taking the enemy capital wins", func(t *testing.T) {
-		s := state(e, p("a", "sarnos", 30))
-		if _, err := e.Resolve(s, []model.Order{move("a", "kethra")}); err != nil {
-			t.Fatal(err)
+	// endTurns resolves and evaluates n turns with no orders.
+	endTurns := func(s *GameState, n int) {
+		for i := 0; i < n && !s.Over; i++ {
+			e.Resolve(s, nil)
+			e.Evaluate(s, 10)
+			if !s.Over {
+				s.Turn++
+			}
 		}
+	}
+	t.Run("taking the enemy capital wins once held", func(t *testing.T) {
+		s := state(e, p("a", "sarnos", 30))
+		e.Resolve(s, []model.Order{move("a", "kethra")})
 		e.Evaluate(s, 10)
+		if s.Over {
+			t.Fatal("won the turn it was taken; it must be held")
+		}
+		s.Turn++
+		endTurns(s, 1)
 		if !s.Over || s.Winner != model.Player {
 			t.Errorf("got over=%v winner=%s", s.Over, s.Winner)
 		}
 	})
-	t.Run("losing the capital loses", func(t *testing.T) {
+	t.Run("losing the capital loses once held", func(t *testing.T) {
 		s := state(e, p("a", "oros", 30), en("e", "duna", 30))
-		if _, err := e.Resolve(s, []model.Order{move("e", "karsa")}); err != nil {
-			t.Fatal(err)
-		}
+		e.Resolve(s, []model.Order{move("e", "karsa")})
 		e.Evaluate(s, 10)
+		if s.Over {
+			t.Fatal("lost the turn Karsa fell; the player gets a turn to retake it")
+		}
+		s.Turn++
+		endTurns(s, 1)
 		if !s.Over || s.Winner != model.Enemy {
 			t.Errorf("got over=%v winner=%s", s.Over, s.Winner)
 		}
 	})
-	t.Run("four supply centres win", func(t *testing.T) {
-		s := state(e, p("a", "marren", 30), p("b", "sarnos", 30))
-		if _, err := e.Resolve(s, nil); err != nil {
-			t.Fatal(err)
-		}
+	t.Run("retaking the capital resets the count", func(t *testing.T) {
+		s := state(e, p("a", "velia", 40), en("e", "duna", 30))
+		e.Resolve(s, []model.Order{move("e", "karsa")})
 		e.Evaluate(s, 10)
+		s.Turn++
+		e.Resolve(s, []model.Order{move("a", "karsa")}) // 40 v 30*1.5 = 45: fails...
+		e.Evaluate(s, 10)
+		if !s.Over {
+			t.Fatal("control: an unsuccessful counterattack leaves Karsa lost")
+		}
+		s2 := state(e, p("a", "velia", 50), en("e", "duna", 30))
+		e.Resolve(s2, []model.Order{move("e", "karsa")})
+		e.Evaluate(s2, 10)
+		s2.Turn++
+		e.Resolve(s2, []model.Order{move("a", "karsa")}) // 50 > 45: retaken
+		e.Evaluate(s2, 10)
+		if s2.Over || s2.Streak[model.Enemy] != 0 {
+			t.Errorf("retaken: over=%v streak=%d", s2.Over, s2.Streak[model.Enemy])
+		}
+	})
+	t.Run("enough supply centres win once held", func(t *testing.T) {
+		e := testEngine(t)
+		e.Rules.Victory.SupplyCentresToWin = 4
+		s := state(e, p("a", "marren", 30), p("b", "sarnos", 30))
+		endTurns := func(s *GameState, n int) {
+			for i := 0; i < n && !s.Over; i++ {
+				e.Resolve(s, nil)
+				e.Evaluate(s, 10)
+				if !s.Over {
+					s.Turn++
+				}
+			}
+		}
+		endTurns(s, 2)
 		if !s.Over || s.Winner != model.Player {
 			t.Errorf("got over=%v winner=%s outcome=%q", s.Over, s.Winner, s.Outcome)
 		}
@@ -322,6 +366,37 @@ func TestEvaluate(t *testing.T) {
 			t.Errorf("game over: %q", s.Outcome)
 		}
 	})
+}
+
+func TestMusters(t *testing.T) {
+	e := testEngine(t)
+	// Turn 4 is winter. The player holds Karsa and Velia (2 x 3); the enemy
+	// holds Sarnos and Kethra (2 x 3) but has nobody in Kethra.
+	s := state(e, p("a", "velia", 20), p("b", "oros", 20), en("e", "sarnos", 20))
+	s.Turn = 4
+	res, err := e.Resolve(s, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Armies["a"].Strength != 26 || s.Armies["b"].Strength != 20 {
+		t.Errorf("player levies should join the army nearest Karsa: a=%d b=%d", s.Armies["a"].Strength, s.Armies["b"].Strength)
+	}
+	levy := s.Armies["e-levy-4"]
+	if levy == nil || levy.Location != "kethra" || levy.Strength != 6 {
+		t.Errorf("enemy should raise a levy in its empty capital: %+v", levy)
+	}
+	if len(res.Musters) != 2 {
+		t.Errorf("musters = %+v", res.Musters)
+	}
+	obs := e.Perceive(s, res, "g", "a", nil)
+	if obs.Reinforced != 6 || obs.Losses != 0 {
+		t.Errorf("observation: reinforced %d, losses %d", obs.Reinforced, obs.Losses)
+	}
+	// Not winter: nothing.
+	s.Turn = 5
+	if res, _ := e.Resolve(s, nil); len(res.Musters) != 0 {
+		t.Errorf("musters outside winter: %+v", res.Musters)
+	}
 }
 
 func TestPerceive(t *testing.T) {
