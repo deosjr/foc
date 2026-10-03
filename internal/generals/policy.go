@@ -30,10 +30,13 @@ const (
 
 // Action options the policy understands.
 const (
-	ActHold    = "hold"
-	ActMove    = "move"
-	ActRetreat = "retreat"
-	ActUnclear = "unclear"
+	ActHold     = "hold"
+	ActMove     = "move"
+	ActRetreat  = "retreat"
+	ActSupport  = "support"
+	ActEntrench = "entrench"
+	ActScout    = "scout"
+	ActUnclear  = "unclear"
 )
 
 // Draws are the uniform [0,1) numbers the policy may use, all taken from the
@@ -58,6 +61,8 @@ type Situation struct {
 	// (0 if none). NearestEnemy is the closest such province, or "".
 	EnemySeen    func(province string) int
 	NearestEnemy string
+	// Friends maps fellow generals' names to their army ids, for Support.
+	Friends map[string]string
 }
 
 // Decision is the policy's output plus everything needed to explain it.
@@ -165,6 +170,32 @@ func Interpret(a interpret.Answers, t model.Traits, sit Situation, th Thresholds
 			}
 			order = model.Order{ArmyID: sit.ArmyID, Type: model.Retreat, Target: step}
 		}
+	case ActEntrench:
+		order = model.Order{ArmyID: sit.ArmyID, Type: model.Entrench}
+	case ActScout:
+		target := topTarget(a, sit.Map)
+		if sit.Map.Province(target) == nil || target == sit.Location {
+			return unclear(d, t, sit, "no-target")
+		}
+		d.Target = target
+		if !sit.Map.Adjacent(sit.Location, target) {
+			// Riders go one province; look toward the place named.
+			target = sit.Map.NextStep(sit.Location, target)
+		}
+		order = model.Order{ArmyID: sit.ArmyID, Type: model.Scout, Target: target}
+	case ActSupport:
+		names := make([]string, 0, len(sit.Friends))
+		for n := range sit.Friends {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		whom, _ := interpret.Top(a.Whom, names)
+		army, ok := sit.Friends[whom]
+		if !ok {
+			return unclear(d, t, sit, "no-support-target")
+		}
+		d.Target = whom
+		order = model.Order{ArmyID: sit.ArmyID, Type: model.Support, SupportArmyID: army}
 	default:
 		return unclear(d, t, sit, "unknown-action")
 	}
@@ -200,11 +231,14 @@ func unclear(d Decision, t model.Traits, sit Situation, why string) Decision {
 }
 
 // OwnJudgement is step 6, a tiny per-general heuristic: an aggressive
-// general marches on the nearest enemy he has seen; anyone else holds.
-// (Cautious generals will entrench once Entrench exists.)
+// general marches on the nearest enemy he has seen, a cautious one digs in,
+// anyone else holds.
 func OwnJudgement(t model.Traits, sit Situation) *model.Order {
-	if t.Aggression > t.Caution && t.Aggression >= 0.5 && sit.NearestEnemy != "" {
+	switch {
+	case t.Aggression > t.Caution && t.Aggression >= 0.5 && sit.NearestEnemy != "":
 		return &model.Order{ArmyID: sit.ArmyID, Type: model.MoveToward, Target: sit.NearestEnemy}
+	case t.Caution > t.Aggression && t.Caution >= 0.5:
+		return &model.Order{ArmyID: sit.ArmyID, Type: model.Entrench}
 	}
 	return &model.Order{ArmyID: sit.ArmyID, Type: model.Hold}
 }
@@ -222,9 +256,9 @@ const (
 // marching within the player's own lands is neither.
 func category(act string, a interpret.Answers, sit Situation) cat {
 	switch act {
-	case ActHold, ActRetreat, "entrench":
+	case ActHold, ActRetreat, ActEntrench:
 		return defensive
-	case "support":
+	case ActSupport:
 		return aggressive
 	case ActMove:
 		t := topTarget(a, sit.Map)

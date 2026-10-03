@@ -131,9 +131,9 @@ The toy ships one small map, three player generals, two enemy armies and a fully
 2. Cut supports: any supporter whose province is the destination of an enemy move loses its support.
 3. For each province, gather contenders. A defender's power is strength × terrain multiplier (+0.25 if entrenched) + supports. An attacker's power is strength + supports.
 4. The highest power takes the province. A tie means a stand-off: nobody enters and the defender stays.
-5. Two armies moving into each other's provinces fight at the border with the same rule; the loser stays home.
+5. Two armies moving into each other's provinces fight a field battle on the road between, with the same rule and their supports. That is their only battle this turn: the loser falls back home, and the winner holds its own province without advancing.
 6. Casualties per battle: loser loses 30% of its strength, winner loses 10% of its own. Round half up.
-7. A dislodged defender retreats to the adjacent province with no enemy army that is closest to its own capital (ties broken by province id), or disbands if none exists.
+7. A dislodged defender retreats to the adjacent province with no enemy army that is closest to its own capital (ties broken by province id), never into a province its attackers came from, or disbands if none exists.
 8. A province's owner changes when an army ends the turn in it unopposed.
 
 **Victory.** The player wins by taking Kethra or holding four of the five supply centres at the end of a turn. The player loses if Karsa falls or all armies are destroyed. Turn 20 ends the game with a score by supply centres held.
@@ -665,7 +665,7 @@ fog-of-command/
 
 5. **Review and polish.** Rationales, the `/review` page with side-by-side maps, SSE progress, route overlay. (The recognised-names line already shipped with milestone 2.) *(Status: done.)*
 6. **Full friction.** Interception, clarification letters, plausibility and loyalty handling, honesty-driven omissions, standing orders beyond movement. *(Status: done, with these choices: a clarification request travels as that turn's report, with kind `clarification`, so the player never loses a turn's news; own judgement marches on the nearest enemy the general has himself seen; hiding a lost battle also hides its dead; interception is rolled against the enemy's true positions when the letter sets out. The only standing order beyond movement is `Entrench`, which arrives with milestone 7.)*
-7. **Full rules.** `Support`, `Entrench`, `Scout`, the third general, the heuristic enemy AI, the full map and 20 turns. Hesk needs the own-judgement step from milestone 6.
+7. **Full rules.** `Support`, `Entrench`, `Scout`, the third general, the heuristic enemy AI, the full map and 20 turns. Hesk needs the own-judgement step from milestone 6. *(Status: done. Rule changes made on the way: a head-on clash is one field battle on the road, after which the loser falls back and the winner holds without advancing, so marching out of the capital to meet the enemy can no longer lose it the same turn; a dislodged army never retreats into the province its attacker came from; the enemy's capital garrison stays and entrenches rather than leaving whenever another army is near; a scout order naming a distant province looks one province toward it. `scenarios/full.yaml` is the default; `scenarios/poc.yaml` remains for the tests. On Claude Sonnet 5 via the CLI: 29/29 clear eval letters, a 20-turn-capped game with three generals at 9.1 s per turn on average.)*
 8. **More providers.** `jev`, the remaining LLM adapters, exact record/replay. The `jev` adapter waits on TypeSafe's API docs and a key.
 9. **Conditional orders.** Trigger-plus-action standing orders and the questions to extract them. Needs design decisions first: which triggers generals recognise, how many conditions a letter may carry, and what happens when a trigger fires while a letter is in transit.
 

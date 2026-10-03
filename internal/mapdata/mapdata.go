@@ -305,6 +305,7 @@ type Intel struct {
 type Scenario struct {
 	Name        string              `yaml:"name"`
 	TurnCap     int                 `yaml:"turn_cap"`
+	EnemyAI     string              `yaml:"enemy_ai"` // scripted (follows enemy_routes) | heuristic
 	Armies      []ArmyDef           `yaml:"armies"`
 	EnemyRoutes map[string][]string `yaml:"enemy_routes"`
 	Intel       []Intel             `yaml:"intel"`
@@ -318,6 +319,13 @@ func LoadScenario(path string, m *Map) (*Scenario, error) {
 	}
 	if s.TurnCap < 1 {
 		return nil, fmt.Errorf("scenario %s: turn_cap must be >= 1", path)
+	}
+	switch s.EnemyAI {
+	case "":
+		s.EnemyAI = "scripted"
+	case "scripted", "heuristic":
+	default:
+		return nil, fmt.Errorf("scenario %s: enemy_ai must be scripted or heuristic, not %q", path, s.EnemyAI)
 	}
 	seen := map[string]bool{}
 	for _, a := range s.Armies {

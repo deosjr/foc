@@ -14,7 +14,8 @@
 #   class: none       no instruction at all (news, praise, questions); the
 #                     letter should be ignored and the standing order kept.
 #
-# Actions: hold, move, retreat. Targets are province ids.
+# Actions: hold, move, support, entrench, scout, retreat. Targets are
+# province ids; expect.whom names the general a support letter means.
 # Locations used: karsa, velia, duna, oros, hollow, marren.
 
 letters:
@@ -32,6 +33,7 @@ letters:
     location: duna
     letter: Hold Duna Hills. Do not move from there until you hear from me.
     expect: {action: hold}
+    accept: [entrench]
 
   - id: c03
     class: clear
@@ -69,6 +71,7 @@ letters:
     location: oros
     letter: Stay where you are and guard the ford.
     expect: {action: hold}
+    accept: [entrench]
 
   - id: c08
     class: clear
@@ -105,6 +108,7 @@ letters:
     location: velia
     letter: Remain in Velia. Under no circumstances advance.
     expect: {action: hold}
+    accept: [entrench]
 
   - id: c13
     class: clear
@@ -128,6 +132,7 @@ letters:
     friendly: {saris: hollow}
     letter: Join Lady Saris at Hollow Wood.
     expect: {action: move, target: hollow}
+    accept: [support]
 
   - id: c16
     class: clear
@@ -135,6 +140,7 @@ letters:
     location: duna
     letter: Keep your position in the hills. The enemy will break against you there.
     expect: {action: hold}
+    accept: [entrench]
 
   - id: c17
     class: clear
@@ -156,6 +162,7 @@ letters:
     location: velia
     letter: Do not attack. Hold Velia and wait for my word.
     expect: {action: hold}
+    accept: [entrench]
 
   - id: c20
     class: clear
@@ -178,6 +185,7 @@ letters:
     standing: hold
     letter: Your orders are unchanged. Hold Duna Hills.
     expect: {action: hold}
+    accept: [entrench]
 
   - id: c23
     class: clear
@@ -186,6 +194,53 @@ letters:
     letter: Bring your army back to Karsa; the capital needs you.
     expect: {action: move, target: karsa}
     accept: [retreat]
+
+  # ------------------------------------------- clear, milestone 7 orders --
+  - id: c24
+    class: clear
+    general: saris
+    location: oros
+    friendly: {velk: hollow}
+    letter: Support Damar Velk's attack on Marren with all your strength.
+    expect: {action: support, whom: velk}
+
+  - id: c25
+    class: clear
+    general: velk
+    location: karsa
+    friendly: {saris: duna}
+    letter: Lend your strength to Lady Saris in holding the Duna Hills.
+    expect: {action: support, whom: saris}
+
+  - id: c26
+    class: clear
+    general: saris
+    location: duna
+    letter: Dig in on the Duna Hills and fortify your camp; we must not lose them.
+    expect: {action: entrench}
+    accept: [hold]
+
+  - id: c27
+    class: clear
+    general: hesk
+    location: karsa
+    letter: Fortify Karsa and make ready for a siege.
+    expect: {action: entrench}
+    accept: [hold]
+
+  - id: c28
+    class: clear
+    general: velk
+    location: velia
+    letter: Send riders into Hollow Wood to see what is there, but do not commit the army.
+    expect: {action: scout, target: hollow}
+
+  - id: c29
+    class: clear
+    general: hesk
+    location: karsa
+    letter: Have your scouts look into the Duna Hills.
+    expect: {action: scout, target: duna}
 
   # ------------------------------------------------------------ ambiguous --
   - id: a01
@@ -264,7 +319,7 @@ letters:
     location: velia
     friendly: {velk: hollow}
     letter: Lend Velk a hand at Hollow Wood if he needs it.
-    readings: [move, hold]
+    readings: [support, move, hold]
     target: hollow
 
   - id: a11

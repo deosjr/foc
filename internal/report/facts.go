@@ -26,7 +26,17 @@ type ReportFacts struct {
 	Concerns         []string        `json:"concerns"`
 	Refused          bool            `json:"refused"`
 	RefusedOrder     string          `json:"refused_order,omitempty"`
+	Support          *SupportFacts   `json:"support,omitempty"`
+	EntrenchedTurns  int             `json:"entrenched_turns,omitempty"` // 2 or more: fully dug in
+	Scouted          string          `json:"scouted,omitempty"`
 	Clarification    *ClarifyFacts   `json:"clarification_needed,omitempty"`
+}
+
+// SupportFacts is what became of the support a general was ordered to give.
+type SupportFacts struct {
+	General string `json:"general"`
+	At      string `json:"at"`
+	Result  string `json:"result"` // given | cut by an enemy attack | too far away
 }
 
 // ClarifyFacts is what a general could not make out of a letter.
@@ -85,7 +95,10 @@ func (f ReportFacts) Text() string {
 		parts = append(parts, c.General, c.Province)
 	}
 	parts = append(parts, f.Concerns...)
-	parts = append(parts, f.RefusedOrder)
+	parts = append(parts, f.RefusedOrder, f.Scouted)
+	if f.Support != nil {
+		parts = append(parts, f.Support.General, f.Support.At)
+	}
 	if c := f.Clarification; c != nil {
 		parts = append(parts, c.YourLetter)
 		parts = append(parts, c.Unclear...)

@@ -1,12 +1,14 @@
 # The fixed question set sent with every dispatch, in one request.
 # Prompts are text/template strings with .General and .Location (display names).
-# The PoC asks only about the actions it can carry out: hold, move, retreat.
 questions:
   - id: plausible
     kind: score
     prompt: >-
-      How much does this read as genuine, coherent orders from a sovereign to a
-      field commander? 0 means nonsense or an obvious forgery, 1 means entirely genuine.
+      How much does this read as a genuine letter from the sovereign to a
+      general: orders, news, courtesies or questions all count as genuine, and
+      so do vague or badly written ones. Score low only for gibberish,
+      self-contradiction, or something no sovereign would plausibly send, such
+      as a forgery or a trick. 0 = clearly not genuine, 1 = entirely genuine.
   - id: addressed
     kind: binary
     prompt: >-
@@ -17,10 +19,13 @@ questions:
     prompt: >-
       What is {{.General}} most plausibly being told to do now? hold = stay in
       {{.Location}} and defend it; move = march toward some province, whether to
-      attack, occupy or join someone there; retreat = fall back away from the
-      enemy to a neighbouring province; unclear = the instruction cannot be made
-      out from the letter.
-    options: [hold, move, retreat, unclear]
+      attack, occupy or join someone there; support = stay put and lend strength
+      to a named fellow general's attack or defence nearby; entrench = dig in
+      where he stands and fortify; scout = stay put and send riders to see into
+      a neighbouring province; retreat = fall back away from the enemy to a
+      neighbouring province; unclear = the instruction cannot be made out from
+      the letter.
+    options: [hold, move, support, entrench, scout, retreat, unclear]
   - id: target
     kind: choice
     prompt: >-
@@ -28,6 +33,12 @@ questions:
       should march, or fall back to? Answer none if the instruction names no
       place, and unclear if it names places but it cannot be told which is meant.
     options_from: provinces
+  - id: support_whom
+    kind: choice
+    prompt: >-
+      Which fellow general, if any, is {{.General}} told to support or aid?
+      Answer none if no fellow general is to be supported.
+    options_from: friendly_generals
   - id: engagement
     kind: score
     prompt: >-

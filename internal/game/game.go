@@ -81,7 +81,7 @@ type Game struct {
 	questions    *interpret.QuestionSet
 	writer       *report.Writer
 	rationales   *report.RationaleWriter
-	enemy        *enemy.Scripted
+	enemy        enemy.AI
 	decision     decision.Model
 	log          *runlog.Log
 	runDir       string
@@ -166,7 +166,7 @@ func New(o Options) (*Game, error) {
 		state:          eng.NewState(scn),
 		generals:       map[string]*model.General{},
 		questions:      qs,
-		enemy:          enemy.NewScripted(scn.EnemyRoutes),
+		enemy:          newEnemy(scn, m),
 		decision:       o.Decision,
 		rationales:     rationales,
 		log:            o.Log,
@@ -368,12 +368,15 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 			if strings.HasPrefix(in.Step, "own-judgement") {
 				effective[l.To] = []string{fmt.Sprintf(
 					"I could not make out what you wished me to do from your letter sent turn %d, so I acted on my own judgement and chose to %s.",
-					l.SentTurn, interpret.DescribeOrder(*in.Order, g.Map))}
+					l.SentTurn, interpret.DescribeOrder(*in.Order, g.Map, g.armyNames()))}
 			}
 		case generals.OutcomeClarify:
-			what := "what you would have me do"
-			if in.Step == "no-target" {
-				what = "where you would have me go"
+			what := map[string]string{
+				"no-target":         "where you would have me go",
+				"no-support-target": "whom you would have me support",
+			}[in.Step]
+			if what == "" {
+				what = "what you would have me do"
 			}
 			clarify[l.To] = &report.ClarifyFacts{LetterSentTurn: l.SentTurn, YourLetter: l.Body, Unclear: []string{what}}
 		case generals.OutcomeRefuse:
@@ -462,7 +465,7 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 	omitted := map[string][]string{}
 	for _, gid := range active {
 		f, om := generals.Distort(obs[gid], g.generals[gid], generals.ReportContext{
-			Map: g.Map, Rules: g.Rules, GeneralNames: names,
+			Map: g.Map, Rules: g.Rules, GeneralNames: names, ArmyNames: g.armyNames(),
 			OrderSource: sources[gid], Concerns: append(append([]string{}, doubts[gid]...), effective[gid]...),
 			Refused: refused[gid], Clarify: clarify[gid], Draw: g.rngReporting.Float64,
 		})
@@ -496,7 +499,7 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 			}
 			rf := report.RationaleFacts{
 				General: g.generals[l.To].Name, Location: g.Map.NameOf(obs[l.To].Start), Letter: l.Body,
-				SentTurn: l.SentTurn, Decision: interpret.DescribeOrder(order, g.Map),
+				SentTurn: l.SentTurn, Decision: interpret.DescribeOrder(order, g.Map, g.armyNames()),
 				Reading: report.Reading(in.Outcome, in.Step),
 			}
 			wg.Add(1)
@@ -596,6 +599,22 @@ func (g *Game) intercept(l *LetterRecord) {
 	}
 }
 
+func newEnemy(scn *mapdata.Scenario, m *mapdata.Map) enemy.AI {
+	if scn.EnemyAI == "heuristic" {
+		return &enemy.Heuristic{Map: m}
+	}
+	return enemy.NewScripted(scn.EnemyRoutes)
+}
+
+// armyNames maps army ids to their generals' names.
+func (g *Game) armyNames() map[string]string {
+	out := map[string]string{}
+	for _, gen := range g.generals {
+		out[gen.ArmyID] = gen.Name
+	}
+	return out
+}
+
 // situation is what a general knows of his own position and the enemy.
 func (g *Game) situation(gid string) generals.Situation {
 	gen := g.generals[gid]
@@ -606,6 +625,12 @@ func (g *Game) situation(gid string) generals.Situation {
 		Owner:     func(p string) model.Side { return g.state.Provinces[p].Owner },
 		Strength:  army.Strength,
 		EnemySeen: func(p string) int { return seen[p] },
+		Friends:   map[string]string{},
+	}
+	for _, other := range g.generalOrder {
+		if a := g.state.Armies[g.generals[other].ArmyID]; other != gid && a != nil {
+			sit.Friends[g.generals[other].Name] = a.ID
+		}
 	}
 	best := -1
 	for _, p := range g.Map.IDs() { // sorted, so ties go to the lowest id

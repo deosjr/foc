@@ -232,9 +232,9 @@ func TestFriction(t *testing.T) {
 			t.Errorf("aggressive Velk should march on the nearest enemy he saw: %v", d.Order)
 		}
 	})
-	t.Run("unclear: cautious own judgement holds", func(t *testing.T) {
+	t.Run("unclear: cautious own judgement digs in", func(t *testing.T) {
 		d := Interpret(unclearLetter, saris, withEnemy, th, poc, Draws{Initiative: 0.1, Refuse: 1})
-		if d.Outcome != OutcomeOrder || d.Order.Type != model.Hold {
+		if d.Outcome != OutcomeOrder || d.Order.Type != model.Entrench {
 			t.Errorf("got %s %v", d.Outcome, d.Order)
 		}
 	})
@@ -305,5 +305,41 @@ func TestOmissions(t *testing.T) {
 	rc.Draw = always
 	if _, om = Distort(lost, &model.General{Name: "Ione Saris", Traits: honest}, rc); len(om) != 0 {
 		t.Errorf("a perfectly honest general omitted %v", om)
+	}
+}
+
+func TestNewOrders(t *testing.T) {
+	m := loadMap(t)
+	full := []string{"hold", "move", "support", "entrench", "scout", "retreat", "unclear"}
+	clear := func(act string, target map[string]float64, whom map[string]float64) interpret.Answers {
+		a := interpret.Answers{Plausible: 0.9, Addressed: 0.9, Engagement: 0.5,
+			Action: map[string]float64{act: 0.9, "hold": 0.1}, Target: target, Whom: whom}
+		if act == "hold" {
+			a.Action = map[string]float64{"hold": 1}
+		}
+		return a
+	}
+	s := sit(m, "duna")
+	s.Friends = map[string]string{"Damar Velk": "a-velk"}
+	dr := Draws{Initiative: 1, Refuse: 1}
+	cases := []struct {
+		name  string
+		a     interpret.Answers
+		order model.Order
+		step  string
+	}{
+		{"entrench", clear("entrench", map[string]float64{"none": 1}, nil), model.Order{ArmyID: "a", Type: model.Entrench}, "clear"},
+		{"scout a neighbour", clear("scout", map[string]float64{"hollow": 1}, nil), model.Order{ArmyID: "a", Type: model.Scout, Target: "hollow"}, "clear"},
+		{"scout far away looks one province toward it", clear("scout", map[string]float64{"ilth": 1}, nil), model.Order{ArmyID: "a", Type: model.Scout, Target: "lyde"}, "clear"},
+		{"support a named general", clear("support", map[string]float64{"none": 1}, map[string]float64{"Damar Velk": 0.9, "none": 0.1}), model.Order{ArmyID: "a", Type: model.Support, SupportArmyID: "a-velk"}, "clear"},
+		{"support nobody in particular asks whom", clear("support", map[string]float64{"none": 1}, map[string]float64{"none": 1}), model.Order{ArmyID: "a", Type: model.Hold}, "no-support-target"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			d := Interpret(c.a, saris, s, th, full, dr)
+			if d.Step != c.step || d.Order == nil || *d.Order != c.order {
+				t.Errorf("got %s/%s %v, want %s %v", d.Outcome, d.Step, d.Order, c.step, c.order)
+			}
+		})
 	}
 }

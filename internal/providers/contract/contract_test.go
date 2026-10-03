@@ -196,7 +196,8 @@ func (f *fakeLLM) Complete(_ context.Context, _ llm.Request) (llm.Response, erro
 
 const goodJSON = "```json\n" + `{"plausible": 0.9, "addressed": 0.95, "engagement": 0.6,
   "action": {"hold": 0.1, "move": 0.85, "retreat": 0.0, "unclear": 0.05},
-  "target": {"Oros Ford": 0.8, "none": 0.1, "unclear": 0.1}}` + "\n```"
+  "target": {"Oros Ford": 0.8, "none": 0.1, "unclear": 0.1},
+  "support_whom": {"none": 1}}` + "\n```"
 
 func decisionRequest(t *testing.T) (decision.Request, []decision.Question, *mapdata.Map) {
 	t.Helper()
@@ -208,7 +209,7 @@ func decisionRequest(t *testing.T) (decision.Request, []decision.Question, *mapd
 	if err != nil {
 		t.Fatal(err)
 	}
-	questions, err := qs.Build("Damar Velk", "Velia", m)
+	questions, err := qs.Build("Damar Velk", "Velia", m, []string{"Ione Saris"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +259,7 @@ func TestDecisionAdapters(t *testing.T) {
 func TestDecisionLLMValidation(t *testing.T) {
 	req, _, _ := decisionRequest(t)
 	missing := `{"plausible": 0.9, "addressed": 0.9, "engagement": 0.5, "action": {"move": 1}}`
-	unknown := `{"plausible": 0.9, "addressed": 0.9, "engagement": 0.5, "action": {"charge": 1}, "target": {"none": 1}}`
+	unknown := `{"plausible": 0.9, "addressed": 0.9, "engagement": 0.5, "action": {"charge": 1}, "target": {"none": 1}, "support_whom": {"none": 1}}`
 	for name, reply := range map[string]string{"missing answer": missing, "unknown option": unknown, "not json": "I would march."} {
 		d, _ := dllm.New(providers.ProviderConfig{}, providers.Deps{LLM: &fakeLLM{replies: []string{reply, reply}}})
 		if _, err := d.Decide(context.Background(), req); err == nil {

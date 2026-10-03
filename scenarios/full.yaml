@@ -1,0 +1,14 @@
+# The full toy: three generals near Karsa, two enemy armies near Kethra, a
+# heuristic enemy and 20 turns.
+name: The War for the Valley
+turn_cap: 20
+enemy_ai: heuristic
+armies:
+  - {id: a-velk,  side: player, location: velia,  strength: 30, general: velk}
+  - {id: a-saris, side: player, location: duna,   strength: 25, general: saris}
+  - {id: a-hesk,  side: player, location: karsa,  strength: 20, general: hesk}
+  - {id: e-1,     side: enemy,  location: sarnos, strength: 30, commander: Orsk the Red}
+  - {id: e-2,     side: enemy,  location: ilth,   strength: 25, commander: Tamar of the Pass}
+intel:
+  - {province: sarnos, enemy_strength: 30}
+  - {province: ilth,   enemy_strength: 25}

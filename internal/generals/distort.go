@@ -16,6 +16,7 @@ type ReportContext struct {
 	Map          *mapdata.Map
 	Rules        *mapdata.Ruleset
 	GeneralNames map[string]string // id -> display name
+	ArmyNames    map[string]string // army id -> its general's display name
 	OrderSource  string
 	Concerns     []string
 	Refused      *model.Order         // an order he quietly refused this turn
@@ -71,10 +72,25 @@ func Distort(obs engine.Observation, g *model.General, rc ReportContext) (report
 	if obs.RetreatedTo != "" {
 		f.RetreatedTo = name(obs.RetreatedTo)
 	}
-	f.OrderOutcome = outcome(obs, rc.Map)
+	f.OrderOutcome = outcome(obs, rc)
+	if obs.Entrenched > 0 {
+		f.EntrenchedTurns = obs.Entrenched
+	}
+	if obs.Scouted != "" {
+		f.Scouted = name(obs.Scouted)
+	}
+	if sp := obs.Support; sp != nil {
+		result := map[string]string{"given": "given", "cut": "cut by an enemy attack",
+			"too-far": "too far away", "same-province": "given"}[sp.Status]
+		f.Support = &report.SupportFacts{General: rc.ArmyNames[sp.Supported], At: name(sp.Into), Result: result}
+	}
 	for _, b := range obs.Battles {
+		place := name(b.Place)
+		if b.Road != "" {
+			place = fmt.Sprintf("the road between %s and %s", name(b.Place), name(b.Road))
+		}
 		f.Battles = append(f.Battles, report.BattleFacts{
-			Place:       name(b.Place),
+			Place:       place,
 			Result:      b.Result,
 			EnemyLosses: roundHalfUp(float64(b.EnemyLosses) * (1 + d.VanityEnemy*tr.Vanity)),
 		})
@@ -139,21 +155,34 @@ func omit(f *report.ReportFacts, obs engine.Observation, tr model.Traits, rc Rep
 		omitted = append(omitted, "refusing the order to "+f.RefusedOrder)
 		f.Refused, f.RefusedOrder = false, ""
 	}
+	if f.Support != nil && f.Support.Result != "given" && rc.Draw() < p {
+		omitted = append(omitted, "failing to support "+f.Support.General)
+		f.Support = nil
+		f.OrderOutcome = "held " + f.Location
+	}
 	return omitted
 }
 
-func outcome(obs engine.Observation, m *mapdata.Map) string {
-	name := m.NameOf
+func outcome(obs engine.Observation, rc ReportContext) string {
+	name := rc.Map.NameOf
+	field := false
+	for _, b := range obs.Battles {
+		field = field || b.Road != ""
+	}
 	switch {
 	case obs.Disbanded:
 		return "the army was destroyed"
 	case obs.RetreatedTo != "":
 		return fmt.Sprintf("driven out of %s, fell back to %s", name(obs.Start), name(obs.RetreatedTo))
 	case obs.Blocked != nil:
-		switch obs.Blocked.Reason {
-		case "retreat-blocked":
+		switch {
+		case obs.Blocked.Reason == "retreat-blocked":
 			return fmt.Sprintf("could not fall back to %s: the enemy holds it", name(obs.Blocked.Target))
-		case "standoff":
+		case obs.Blocked.Reason == "field":
+			return fmt.Sprintf("met the enemy on the road to %s and drove them back; still in %s", name(obs.Blocked.Target), name(obs.Location))
+		case field && obs.Blocked.Reason == "lost":
+			return fmt.Sprintf("met the enemy on the road to %s and was driven back; still in %s", name(obs.Blocked.Target), name(obs.Location))
+		case obs.Blocked.Reason == "standoff":
 			return fmt.Sprintf("the advance into %s was halted in a stand-off; still in %s", name(obs.Blocked.Target), name(obs.Location))
 		default:
 			return fmt.Sprintf("the advance into %s was thrown back; still in %s", name(obs.Blocked.Target), name(obs.Location))
@@ -164,6 +193,21 @@ func outcome(obs engine.Observation, m *mapdata.Map) string {
 		return fmt.Sprintf("marched from %s and reached %s", name(obs.Start), name(obs.Location))
 	case obs.Start != obs.Location:
 		return fmt.Sprintf("marched from %s to %s, on the way to %s", name(obs.Start), name(obs.Location), name(obs.Order.Target))
+	case obs.Order.Type == model.Entrench && obs.Entrenched >= 2:
+		return "held " + name(obs.Location) + ", dug in"
+	case obs.Order.Type == model.Entrench:
+		return "began to dig in at " + name(obs.Location)
+	case obs.Order.Type == model.Scout:
+		return fmt.Sprintf("held %s and sent riders into %s", name(obs.Location), name(obs.Scouted))
+	case obs.Support != nil:
+		who := rc.ArmyNames[obs.Support.Supported]
+		switch obs.Support.Status {
+		case "cut":
+			return fmt.Sprintf("held %s; could not support %s, for the enemy came at us", name(obs.Location), who)
+		case "too-far":
+			return fmt.Sprintf("held %s; %s was too far away to support %s", name(obs.Location), name(obs.Support.Into), who)
+		}
+		return fmt.Sprintf("held %s and lent strength to %s at %s", name(obs.Location), who, name(obs.Support.Into))
 	}
 	return "held " + name(obs.Location)
 }

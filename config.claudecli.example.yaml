@@ -33,6 +33,6 @@ report:
 ruleset: rulesets/ancient.yaml
 map: maps/valley.json
 generals: content/generals.yaml
-scenario: scenarios/poc.yaml
+scenario: scenarios/full.yaml   # or scenarios/poc.yaml for the two-general proof of concept
 prompts: prompts
 runs_dir: runs

@@ -222,3 +222,44 @@ func TestUnclearLetterAsksForClarification(t *testing.T) {
 	}
 	t.Fatal("Saris never asked for clarification in 20 seeds")
 }
+
+func TestFullScenarioPlays(t *testing.T) {
+	c := testConfig()
+	c.Scenario = "../../scenarios/full.yaml"
+	g, err := New(Options{Config: c, Decision: dmock.New(), LLM: lmock.New(), RunDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(g.GeneralIDs()); n != 3 {
+		t.Fatalf("%d generals, want 3", n)
+	}
+	letters := []map[string]string{
+		{"hesk": "Dig in at Karsa and fortify the walls.", "saris": "Support Damar Velk.", "velk": "March on Marren."},
+		{"saris": "Scout toward Hollow Wood."},
+		{"velk": "Take Sarnos.", "hesk": "Hold Karsa."},
+	}
+	for turn := 0; turn < 20 && !g.Over(); turn++ {
+		if turn < len(letters) {
+			for id, text := range letters[turn] {
+				g.SetDraft(id, text)
+			}
+		}
+		if err := g.EndTurn(context.Background(), nil); err != nil {
+			t.Fatalf("turn %d: %v", turn+1, err)
+		}
+	}
+	if !g.Over() {
+		t.Error("game did not end by turn 20")
+	}
+	orders := map[string]bool{}
+	for _, l := range g.Letters() {
+		if in := l.Interpretation; in != nil && in.Order != nil {
+			orders[string(in.Order.Type)] = true
+		}
+	}
+	for _, want := range []string{"Entrench", "Support", "Scout", "MoveToward"} {
+		if !orders[want] {
+			t.Errorf("no letter was read as %s (got %v)", want, orders)
+		}
+	}
+}

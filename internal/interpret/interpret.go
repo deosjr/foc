@@ -90,13 +90,26 @@ func LetterFromState(state string) string {
 	return state[i+len("LETTER:\n<<<\n") : j]
 }
 
-// DescribeOrder renders an order in plain words with display names.
-func DescribeOrder(o model.Order, m *mapdata.Map) string {
+// DescribeOrder renders an order in plain words with display names. The
+// optional armyNames maps army ids to the names of their generals, for
+// Support orders.
+func DescribeOrder(o model.Order, m *mapdata.Map, armyNames ...map[string]string) string {
 	switch o.Type {
 	case model.MoveToward:
 		return "march toward " + m.NameOf(o.Target)
 	case model.Retreat:
 		return "fall back to " + m.NameOf(o.Target)
+	case model.Entrench:
+		return "dig in and hold"
+	case model.Scout:
+		return "hold and scout " + m.NameOf(o.Target)
+	case model.Support:
+		for _, names := range armyNames {
+			if n := names[o.SupportArmyID]; n != "" {
+				return "support " + n
+			}
+		}
+		return "support a fellow general"
 	case "":
 		return "none"
 	}
@@ -109,7 +122,7 @@ type QuestionSpec struct {
 	Kind        decision.Kind `yaml:"kind"`
 	Prompt      string        `yaml:"prompt"`
 	Options     []string      `yaml:"options"`
-	OptionsFrom string        `yaml:"options_from"` // "provinces"
+	OptionsFrom string        `yaml:"options_from"` // "provinces" | "friendly_generals"
 	tmpl        *template.Template
 }
 
@@ -139,7 +152,7 @@ func LoadQuestions(path string) (*QuestionSet, error) {
 		}
 		q.tmpl = t
 		have[q.ID] = true
-		if q.Kind == decision.KindChoice && len(q.Options) == 0 && q.OptionsFrom != "provinces" {
+		if q.Kind == decision.KindChoice && len(q.Options) == 0 && q.OptionsFrom != "provinces" && q.OptionsFrom != "friendly_generals" {
 			return nil, fmt.Errorf("%s: choice question %s has no options", path, q.ID)
 		}
 	}
@@ -161,8 +174,9 @@ func (qs *QuestionSet) ActionOptions() []string {
 	return nil
 }
 
-// Build renders the questions for one general and location.
-func (qs *QuestionSet) Build(general, location string, m *mapdata.Map) ([]decision.Question, error) {
+// Build renders the questions for one general and location. friends are
+// the other generals' names, the options of a friendly_generals question.
+func (qs *QuestionSet) Build(general, location string, m *mapdata.Map, friends []string) ([]decision.Question, error) {
 	data := map[string]string{"General": general, "Location": location}
 	var out []decision.Question
 	for _, q := range qs.Questions {
@@ -173,10 +187,14 @@ func (qs *QuestionSet) Build(general, location string, m *mapdata.Map) ([]decisi
 		dq := decision.Question{ID: q.ID, Kind: q.Kind, Prompt: strings.TrimSpace(buf.String())}
 		if q.Kind == decision.KindChoice {
 			dq.Options = append([]string(nil), q.Options...)
-			if q.OptionsFrom == "provinces" {
+			switch q.OptionsFrom {
+			case "provinces":
 				for _, p := range m.Provinces {
 					dq.Options = append(dq.Options, p.Name)
 				}
+				dq.Options = append(dq.Options, None, Unclear)
+			case "friendly_generals":
+				dq.Options = append(dq.Options, friends...)
 				dq.Options = append(dq.Options, None, Unclear)
 			}
 		}
@@ -191,7 +209,8 @@ type Answers struct {
 	Addressed  float64            `json:"addressed"`
 	Engagement float64            `json:"engagement"`
 	Action     map[string]float64 `json:"action"`
-	Target     map[string]float64 `json:"target"` // province id, "none" or "unclear"
+	Target     map[string]float64 `json:"target"`                 // province id, "none" or "unclear"
+	Whom       map[string]float64 `json:"support_whom,omitempty"` // general name, "none" or "unclear"
 }
 
 // Parse validates a response against the questions. A missing answer is an
@@ -222,6 +241,8 @@ func Parse(resp decision.Response, qs []decision.Question, m *mapdata.Map) (Answ
 				for name, p := range probs {
 					out.Target[provinceID(name, m)] += p
 				}
+			case "support_whom":
+				out.Whom = probs
 			}
 		case decision.KindScore:
 			if math.IsNaN(a.Score) {
@@ -287,7 +308,7 @@ func clamp01(x float64) float64 { return math.Max(0, math.Min(1, x)) }
 
 // Ask sends the question set for one dispatch and validates the answers.
 func Ask(ctx context.Context, dm decision.Model, qs *QuestionSet, c Context, m *mapdata.Map) (Answers, decision.Response, error) {
-	questions, err := qs.Build(c.General.Name, m.NameOf(c.Location), m)
+	questions, err := qs.Build(c.General.Name, m.NameOf(c.Location), m, c.friendlyNames())
 	if err != nil {
 		return Answers{}, decision.Response{}, err
 	}

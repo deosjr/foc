@@ -34,6 +34,7 @@ type Letter struct {
 	Expect   struct {
 		Action string `yaml:"action"`
 		Target string `yaml:"target"`
+		Whom   string `yaml:"whom"` // general id a support letter means
 	} `yaml:"expect"`
 	Accept   []string `yaml:"accept"`
 	Readings []string `yaml:"readings"`
@@ -61,6 +62,8 @@ func Load(path string, m *mapdata.Map, gens map[string]*model.General) ([]Letter
 			return nil, fmt.Errorf("%s: %s: unknown general %q", path, l.ID, l.General)
 		case m.Province(l.Location) == nil:
 			return nil, fmt.Errorf("%s: %s: unknown location %q", path, l.ID, l.Location)
+		case l.Expect.Whom != "" && gens[l.Expect.Whom] == nil:
+			return nil, fmt.Errorf("%s: %s: unknown general %q in expect.whom", path, l.ID, l.Expect.Whom)
 		case l.Class == "clear" && l.Expect.Action == "":
 			return nil, fmt.Errorf("%s: %s: clear letter without expect.action", path, l.ID)
 		case l.Class == "ambiguous" && len(l.Readings) < 2:
@@ -207,7 +210,12 @@ func one(ctx context.Context, dm decision.Model, l Letter, s Setup) Result {
 		owners[p.ID] = p.Owner
 	}
 	sit := generals.Situation{ArmyID: "a", Location: l.Location, Side: model.Player, Map: s.Map,
-		Owner: func(p string) model.Side { return owners[p] }}
+		Owner: func(p string) model.Side { return owners[p] }, Friends: map[string]string{}}
+	for id := range l.Friendly {
+		if g := s.Generals[id]; g != nil {
+			sit.Friends[g.Name] = id
+		}
+	}
 	decide := func(g *model.General) generals.Decision {
 		// A fixed middle draw for sampling; never own judgement or refusal,
 		// so unclear letters show up as requests for clarification.
@@ -225,6 +233,17 @@ func one(ctx context.Context, dm decision.Model, l Letter, s Setup) Result {
 		if ok && l.Expect.Target != "" && r.TopAction != generals.ActHold && r.TopTarget != l.Expect.Target {
 			ok = false
 			r.Annotation = fmt.Sprintf("target %s, expected %s", r.TopTarget, l.Expect.Target)
+		}
+		if ok && l.Expect.Whom != "" && r.TopAction == generals.ActSupport {
+			names := make([]string, 0, len(ans.Whom))
+			for n := range ans.Whom {
+				names = append(names, n)
+			}
+			sort.Strings(names)
+			if whom, _ := interpret.Top(ans.Whom, names); whom != s.Generals[l.Expect.Whom].Name {
+				ok = false
+				r.Annotation = fmt.Sprintf("supports %s, expected %s", whom, s.Generals[l.Expect.Whom].Name)
+			}
 		}
 		r.Agree = ok
 	case "ambiguous":

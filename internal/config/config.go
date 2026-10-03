@@ -45,7 +45,7 @@ func Default() *Config {
 		Decision: providers.ProviderConfig{Provider: "mock", Timeout: 10 * time.Second},
 		LLM:      providers.ProviderConfig{Provider: "mock", Temperature: 0.8, MaxTokens: 400, Timeout: 30 * time.Second},
 		Ruleset:  "rulesets/ancient.yaml", Map: "maps/valley.json", Generals: "content/generals.yaml",
-		Scenario: "scenarios/poc.yaml", Prompts: "prompts", RunsDir: "runs",
+		Scenario: "scenarios/full.yaml", Prompts: "prompts", RunsDir: "runs",
 	}
 	c.Interpretation.Thresholds = generals.Thresholds{Clear: 0.8, Unclear: 0.4, Plausibility: 0.35}
 	c.Interpretation.Rationale = true

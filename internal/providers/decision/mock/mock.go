@@ -28,11 +28,17 @@ func New() *Model { return &Model{} }
 
 var keywords = map[string][]string{
 	"move": {"march", "move", "advance", "attack", "take", "seize", "capture", "go", "proceed", "push",
-		"press", "strike", "assault", "occupy", "relieve", "reinforce", "join", "cross", "ride", "head", "invade", "drive", "make for", "return to"},
+		"press", "strike", "assault", "occupy", "relieve", "join", "cross", "ride", "head", "invade", "drive",
+		"make for", "return to"},
 	"hold": {"hold", "stay", "remain", "defend", "keep", "guard", "stand fast", "stand firm", "wait",
-		"garrison", "dig in", "sit tight"},
-	"retreat": {"retreat", "withdraw", "fall back", "pull back", "abandon", "come home", "return home", "pull"},
+		"garrison", "sit tight"},
+	"retreat":  {"retreat", "withdraw", "fall back", "pull back", "abandon", "come home", "return home", "pull"},
+	"support":  {"support", "aid", "assist", "help", "back up", "reinforce", "lend"},
+	"entrench": {"entrench", "dig in", "fortify", "earthworks", "dig"},
+	"scout":    {"scout", "reconnoitre", "reconnoiter", "spy", "send riders", "find out"},
 }
+
+var actions = []string{"move", "hold", "support", "entrench", "scout", "retreat"}
 
 var hawkish = []string{"attack", "crush", "destroy", "battle", "fight", "strike", "assault", "seize", "smash", "at once", "boldly", "drive"}
 var dovish = []string{"avoid", "careful", "caution", "cautious", "do not engage", "don't engage", "preserve", "safe", "without a fight", "carefully", "no risk", "spare"}
@@ -50,6 +56,23 @@ func find(text string, phrase string) []int {
 	for _, loc := range re.FindAllStringIndex(text, -1) {
 		out = append(out, loc[0])
 	}
+	return out
+}
+
+// friends parses "FRIENDLY GENERALS: A in X; B in Y" from the state.
+func friends(state string) []string {
+	var out []string
+	for _, line := range strings.Split(state, "\n") {
+		if !strings.HasPrefix(line, "FRIENDLY GENERALS: ") {
+			continue
+		}
+		for _, item := range strings.Split(strings.TrimPrefix(line, "FRIENDLY GENERALS: "), "; ") {
+			if i := strings.Index(item, " in "); i > 0 {
+				out = append(out, item[:i])
+			}
+		}
+	}
+	sort.Strings(out)
 	return out
 }
 
@@ -94,9 +117,9 @@ func (m *Model) Decide(_ context.Context, req decision.Request) (decision.Respon
 		}
 	}
 	action := map[string]float64{}
-	total := counts["move"] + counts["hold"] + counts["retreat"]
-	kinds := 0
-	for _, k := range []string{"move", "hold", "retreat"} {
+	total, kinds := 0, 0
+	for _, k := range actions {
+		total += counts[k]
 		if counts[k] > 0 {
 			kinds++
 		}
@@ -105,16 +128,16 @@ func (m *Model) Decide(_ context.Context, req decision.Request) (decision.Respon
 	case total == 0:
 		action = map[string]float64{"unclear": 0.7, "hold": 0.15, "move": 0.1, "retreat": 0.05}
 	case kinds == 1:
-		for _, k := range []string{"move", "hold", "retreat"} {
+		for _, k := range actions {
 			if counts[k] > 0 {
 				action[k] = 0.88
 			} else {
-				action[k] = 0.04
+				action[k] = 0.02
 			}
 		}
-		action["unclear"] = 0.04
+		action["unclear"] = 0.02
 	default:
-		for _, k := range []string{"move", "hold", "retreat"} {
+		for _, k := range actions {
 			action[k] = 0.9 * float64(counts[k]) / float64(total)
 		}
 		action["unclear"] = 0.1
@@ -165,6 +188,23 @@ func (m *Model) Decide(_ context.Context, req decision.Request) (decision.Respon
 		target[interpret.Unclear] = 0.1
 	}
 
+	// Whom to support: the first fellow general named, by any part of his name.
+	whom := map[string]float64{interpret.None: 0.85, interpret.Unclear: 0.15}
+	firstName := -1
+	for _, name := range friends(req.State) {
+		for _, part := range strings.Fields(name) {
+			if len(part) < 4 {
+				continue
+			}
+			for _, pos := range find(letter, strings.ToLower(part)) {
+				if firstName < 0 || pos < firstName {
+					firstName = pos
+					whom = map[string]float64{name: 0.88, interpret.None: 0.06, interpret.Unclear: 0.06}
+				}
+			}
+		}
+	}
+
 	engagement := 0.5
 	for _, w := range hawkish {
 		engagement += 0.15 * float64(len(find(letter, w)))
@@ -197,6 +237,8 @@ func (m *Model) Decide(_ context.Context, req decision.Request) (decision.Respon
 			a.Probs = restrict(action, q.Options)
 		case "target":
 			a.Probs = restrict(target, q.Options)
+		case "support_whom":
+			a.Probs = restrict(whom, q.Options)
 		default:
 			switch q.Kind {
 			case decision.KindChoice:
