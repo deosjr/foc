@@ -659,15 +659,15 @@ fog-of-command/
 1. **Engine only.** Map loading, resolution for `Hold`, `MoveToward` and `Retreat`, victory, driven by Go tests and a debug endpoint that accepts structured orders.
 2. **Pipeline on mocks, in the browser.** Mock decision model and LLM, interpretation steps 3–5, number distortion, reports, courier delay. The web page with map, composers, inbox, End turn and the per-report debug drawer. Playable offline.
 3. **Eval harness.** `foc eval` and the first 30–50 labelled letters, run against the mock and the `llm` decision adapter.
-4. **Real providers.** One real LLM adapter with report validation and fallback, the `llm` decision adapter, caching and retry middleware. Check the PoC done-criteria.
+4. **Real providers.** One real LLM adapter with report validation and fallback, the `llm` decision adapter, caching and retry middleware. Check the PoC done-criteria. *(Status: built and verified end to end on a local Llama 3.1 8B through Ollama; the done-criteria wait on a Claude API key.)*
 
-*Later phases:*
+*Later phases*, reordered so the tools for judging friction arrive before the friction itself, and the letter loop deepens before the rules do:
 
-5. **Full rules.** `Support`, `Entrench`, `Scout`, the third general, the heuristic enemy AI, the full map and 20 turns.
+5. **Review and polish.** Rationales, the `/review` page with side-by-side maps, SSE progress, route overlay. (The recognised-names line already shipped with milestone 2.)
 6. **Full friction.** Interception, clarification letters, plausibility and loyalty handling, honesty-driven omissions, standing orders beyond movement.
-7. **More providers.** `jev`, the remaining LLM adapters, exact record/replay.
-8. **Review and polish.** Rationales, the `/review` page with side-by-side maps, SSE progress, route overlay, recognised-names line.
-9. **Conditional orders.** Trigger-plus-action standing orders and the questions to extract them.
+7. **Full rules.** `Support`, `Entrench`, `Scout`, the third general, the heuristic enemy AI, the full map and 20 turns. Hesk needs the own-judgement step from milestone 6.
+8. **More providers.** `jev`, the remaining LLM adapters, exact record/replay. The `jev` adapter waits on TypeSafe's API docs and a key.
+9. **Conditional orders.** Trigger-plus-action standing orders and the questions to extract them. Needs design decisions first: which triggers generals recognise, how many conditions a letter may carry, and what happens when a trigger fires while a letter is in transit.
 
 ## Open questions and later extensions
 
