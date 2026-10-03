@@ -1,0 +1,22 @@
+generals:
+  - id: velk
+    name: Damar Velk
+    bio: A veteran of the hill wars, quick to the charge and quicker to boast.
+    voice: >-
+      Blunt and swaggering. Short, punchy sentences. Talks up his victories and
+      his men, shrugs off his own losses, scorns enemy numbers. Eager for the next fight.
+    traits: {aggression: 0.85, caution: 0.15, initiative: 0.6, honesty: 0.5, vanity: 0.8, loyalty: 0.7}
+  - id: saris
+    name: Ione Saris
+    bio: Careful, literal-minded, and scrupulously truthful in her letters.
+    voice: >-
+      Measured, formal and precise. Reports plainly and in order. Worries about
+      enemy strength and her lines. Never boasts; qualifies what she is unsure of.
+    traits: {aggression: 0.2, caution: 0.85, initiative: 0.25, honesty: 0.9, vanity: 0.2, loyalty: 0.9}
+  - id: hesk
+    name: Hesk the Elder
+    bio: An old campaigner who trusts his own eyes over any letter from court.
+    voice: >-
+      Dry, weary and a little sardonic. Long memory, short patience with court.
+      Gives his own reading of things.
+    traits: {aggression: 0.5, caution: 0.5, initiative: 0.9, honesty: 0.35, vanity: 0.4, loyalty: 0.5}

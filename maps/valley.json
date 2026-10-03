@@ -1,0 +1,21 @@
+{
+  "name": "The Valley of Ilth",
+  "terrain": {"plain": 1.0, "hills": 1.25, "forest": 1.2, "marsh": 1.1, "ford": 1.15, "city": 1.5},
+  "provinces": [
+    {"id": "karsa",  "name": "Karsa",        "terrain": "city",   "supply": true,  "owner": "player",  "capital": true, "pos": [100, 300]},
+    {"id": "velia",  "name": "Velia",        "terrain": "plain",  "supply": true,  "owner": "player",  "pos": [280, 190]},
+    {"id": "duna",   "name": "Duna Hills",   "terrain": "hills",  "supply": false, "owner": "player",  "pos": [280, 420], "aliases": ["Duna"]},
+    {"id": "oros",   "name": "Oros Ford",    "terrain": "ford",   "supply": false, "owner": "neutral", "pos": [460, 130], "aliases": ["Oros", "ford"]},
+    {"id": "hollow", "name": "Hollow Wood",  "terrain": "forest", "supply": false, "owner": "neutral", "pos": [460, 300], "aliases": ["wood"]},
+    {"id": "marren", "name": "Marren",       "terrain": "plain",  "supply": true,  "owner": "neutral", "pos": [640, 210]},
+    {"id": "lyde",   "name": "Lyde Marsh",   "terrain": "marsh",  "supply": false, "owner": "neutral", "pos": [460, 480], "aliases": ["Lyde", "marsh"]},
+    {"id": "ilth",   "name": "Pass of Ilth", "terrain": "hills",  "supply": false, "owner": "enemy",   "pos": [660, 430], "aliases": ["Ilth", "pass"]},
+    {"id": "sarnos", "name": "Sarnos",       "terrain": "plain",  "supply": true,  "owner": "enemy",   "pos": [820, 200]},
+    {"id": "kethra", "name": "Kethra",       "terrain": "city",   "supply": true,  "owner": "enemy",   "capital": true, "pos": [900, 370]}
+  ],
+  "edges": [
+    ["karsa","velia"], ["karsa","duna"], ["velia","oros"], ["velia","hollow"], ["duna","hollow"],
+    ["duna","lyde"], ["oros","marren"], ["hollow","marren"], ["lyde","ilth"], ["marren","ilth"],
+    ["marren","sarnos"], ["ilth","kethra"], ["sarnos","kethra"]
+  ]
+}

@@ -1,0 +1,22 @@
+# Numbers for the ancient-world ruleset. Nothing era-specific belongs in code.
+name: ancient
+men_per_strength: 100      # strength 30 = 3,000 men
+disband_below: 5
+casualties:
+  loser: 0.30
+  winner: 0.10
+  standoff: 0.10           # both sides in a tied battle
+courier:
+  provinces_per_turn: 2    # delay in turns = floor(hops / provinces_per_turn)
+perception:
+  adjacent_strength_noise: 0.25
+  strength_rounding: 5
+  enemy_losses_noise: 0.20
+distortion:
+  caution_base: 0.6        # reported enemy strength = observed * (base + scale * caution)
+  caution_scale: 0.8
+  vanity_own: 0.6          # reported own losses = true * (1 - vanity_own * vanity)
+  vanity_enemy: 0.6        # reported enemy losses = observed * (1 + vanity_enemy * vanity)
+victory:
+  supply_centres_to_win: 4
+seasons: [Spring, Summer, Autumn, Winter]

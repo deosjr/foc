@@ -1,0 +1,12 @@
+# PoC scenario: two generals, one scripted enemy army, two provinces apart.
+name: The Marren Incursion
+turn_cap: 10
+armies:
+  - {id: a-velk,  side: player, location: velia,  strength: 30, general: velk}
+  - {id: a-saris, side: player, location: duna,   strength: 25, general: saris}
+  - {id: e-1,     side: enemy,  location: marren, strength: 30, commander: Orsk the Red}
+enemy_routes:
+  e-1: [hollow, duna, karsa]
+# What the player knows at the start, as if from court intelligence on turn 0.
+intel:
+  - {province: marren, enemy_strength: 30}
