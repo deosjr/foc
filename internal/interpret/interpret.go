@@ -324,10 +324,13 @@ type Interpretation struct {
 	Parsed     Answers            `json:"parsed"`
 	Weights    map[string]float64 `json:"weights,omitempty"`
 	Reweighted map[string]float64 `json:"reweighted,omitempty"`
-	RNGDraw    float64            `json:"rng_draw"`
-	Outcome    string             `json:"outcome"` // order | unclear | ignored | error
+	RNGDraw    float64            `json:"rng_draw"`        // step 5 sample
+	Initiative float64            `json:"initiative_draw"` // step 4: own judgement or ask
+	RefuseDraw float64            `json:"refuse_draw"`     // step 8
+	Outcome    string             `json:"outcome"`         // order | clarify | refuse | ignored | doubted
 	Step       string             `json:"step"`
 	Order      *model.Order       `json:"order,omitempty"`
+	Refused    *model.Order       `json:"refused,omitempty"`
 	Rationale  string             `json:"rationale,omitempty"`
 	Error      string             `json:"error,omitempty"`
 }

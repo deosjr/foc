@@ -33,6 +33,20 @@ func (c Couriers) Send(l *model.Letter, from, to string) {
 	l.ArriveTurn = l.SentTurn + c.Delay(l.Route)
 }
 
+// Intercept rolls for a courier on a route: for each province on it that
+// holds or neighbours an enemy army (enemyNear), a chance of capture. Every
+// qualifying province is rolled, in route order, so the stream stays aligned.
+// It returns where the letter was taken, or "".
+func (c Couriers) Intercept(route []string, enemyNear func(province string) bool, draw func() float64) string {
+	taken := ""
+	for _, p := range route {
+		if enemyNear(p) && draw() < c.Rules.Courier.Interception && taken == "" {
+			taken = p
+		}
+	}
+	return taken
+}
+
 // NextStanding returns the standing order a general carries into the next
 // turn. MoveToward persists until the target is reached or the army loses a
 // battle on the way; every other PoC order reverts to Hold.

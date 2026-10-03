@@ -8,6 +8,7 @@ casualties:
   standoff: 0.10           # both sides in a tied battle
 courier:
   provinces_per_turn: 2    # delay in turns = floor(hops / provinces_per_turn)
+  interception: 0.10       # chance per route province that holds or neighbours an enemy army
 perception:
   adjacent_strength_noise: 0.25
   strength_rounding: 5
@@ -17,6 +18,7 @@ distortion:
   caution_scale: 0.8
   vanity_own: 0.6          # reported own losses = true * (1 - vanity_own * vanity)
   vanity_enemy: 0.6        # reported enemy losses = observed * (1 + vanity_enemy * vanity)
+  omission: 0.6            # each piece of bad news is left out with p = omission * (1 - honesty)
 victory:
   supply_centres_to_win: 4
 seasons: [Spring, Summer, Autumn, Winter]

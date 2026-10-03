@@ -209,9 +209,12 @@ func one(ctx context.Context, dm decision.Model, l Letter, s Setup) Result {
 	sit := generals.Situation{ArmyID: "a", Location: l.Location, Side: model.Player, Map: s.Map,
 		Owner: func(p string) model.Side { return owners[p] }}
 	decide := func(g *model.General) generals.Decision {
-		return generals.Interpret(ans, g.Traits, sit, s.Thresholds, actions, 0.5)
+		// A fixed middle draw for sampling; never own judgement or refusal,
+		// so unclear letters show up as requests for clarification.
+		return generals.Interpret(ans, g.Traits, sit, s.Thresholds, actions, generals.Draws{Sample: 0.5, Initiative: 1, Refuse: 1})
 	}
-	r.Outcome = decide(gen).Outcome
+	own := decide(gen)
+	r.Outcome = own.Outcome
 
 	switch l.Class {
 	case "clear":
@@ -254,7 +257,7 @@ func one(ctx context.Context, dm decision.Model, l Letter, s Setup) Result {
 			r.Diverge = "same"
 		}
 	case "unclear":
-		r.Agree = r.Outcome == generals.OutcomeUnclear
+		r.Agree = own.Unclear()
 	case "none":
 		r.Agree = r.Outcome == generals.OutcomeIgnored
 	}
@@ -308,7 +311,7 @@ func Report(w io.Writer, provider string, results []Result, sum Summary, verbose
 		ratio(sum.AmbInReadings, sum.Ambiguous), ratio(sum.AmbSplit, sum.Ambiguous))
 	fmt.Fprintf(w, "                   of which Velk is likelier to march than Saris in %s, the reverse in %d\n",
 		ratio(sum.AmbDiverge, sum.AmbSplit), sum.AmbAgainst)
-	fmt.Fprintf(w, "Unclear letters:   %s read as unclear (general holds)\n", ratio(sum.UnclearAgree, sum.Unclear))
+	fmt.Fprintf(w, "Unclear letters:   %s read as unclear (the general asks, or uses his own judgement)\n", ratio(sum.UnclearAgree, sum.Unclear))
 	fmt.Fprintf(w, "No instruction:    %s ignored\n", ratio(sum.NoneAgree, sum.None))
 	fmt.Fprintf(w, "Errors:            %d of %d\n", sum.Errors, len(results))
 }

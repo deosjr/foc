@@ -18,6 +18,11 @@ type ReportContext struct {
 	GeneralNames map[string]string // id -> display name
 	OrderSource  string
 	Concerns     []string
+	Refused      *model.Order         // an order he quietly refused this turn
+	Clarify      *report.ClarifyFacts // what he could not make out, if he is asking
+	// Draw returns a uniform [0,1) number from the reporting stream, for
+	// omissions. Nil means nothing is ever omitted.
+	Draw func() float64
 }
 
 func roundHalfUp(x float64) int { return int(math.Floor(x + 0.5)) }
@@ -34,9 +39,11 @@ func roundTo(x float64, step int) int {
 //   - reported enemy strength = observed × (base + scale × Caution), to the nearest step
 //   - reported own losses = true × (1 − vanity_own × Vanity)
 //   - reported enemy losses = observed × (1 + vanity_enemy × Vanity)
+//   - each negative fact (a lost battle, being driven out, a refused order)
+//     is left out with probability omission × (1 − Honesty)
 //
-// Honesty-driven omissions come in a later milestone.
-func Distort(obs engine.Observation, g *model.General, rc ReportContext) report.ReportFacts {
+// It returns the facts and a description of every fact left out.
+func Distort(obs engine.Observation, g *model.General, rc ReportContext) (report.ReportFacts, []string) {
 	name := rc.Map.NameOf
 	d := rc.Rules.Distortion
 	tr := g.Traits
@@ -90,7 +97,49 @@ func Distort(obs engine.Observation, g *model.General, rc ReportContext) report.
 	for _, c := range obs.Friendly {
 		f.FriendlyContacts = append(f.FriendlyContacts, report.ContactFacts{General: rc.GeneralNames[c.GeneralID], Province: name(c.Province)})
 	}
-	return f
+	if rc.Refused != nil {
+		f.Refused, f.RefusedOrder = true, interpret.DescribeOrder(*rc.Refused, rc.Map)
+	}
+	f.Clarification = rc.Clarify
+	return f, omit(&f, obs, tr, rc)
+}
+
+// omit leaves out bad news, drawing in a fixed order: lost battles, being
+// driven out, a refused order. Draws are taken only for facts that exist.
+func omit(f *report.ReportFacts, obs engine.Observation, tr model.Traits, rc ReportContext) []string {
+	if rc.Draw == nil || obs.Disbanded {
+		return nil // a destroyed army cannot be hidden
+	}
+	p := rc.Rules.Distortion.Omission * (1 - tr.Honesty)
+	var omitted []string
+	var kept []report.BattleFacts
+	hidLoss := false
+	for _, b := range f.Battles {
+		if b.Result == "lost" && rc.Draw() < p {
+			omitted = append(omitted, "the lost battle at "+b.Place)
+			hidLoss = true
+			continue
+		}
+		kept = append(kept, b)
+	}
+	f.Battles = kept
+	if hidLoss {
+		// Hiding a defeat means not counting its dead either.
+		f.OwnLosses = 0
+		if obs.Blocked != nil && obs.Blocked.Reason == "lost" {
+			f.OrderOutcome = "held " + f.Location
+		}
+	}
+	if f.RetreatedTo != "" && rc.Draw() < p {
+		omitted = append(omitted, "being driven out of "+rc.Map.NameOf(obs.Start))
+		f.OrderOutcome = fmt.Sprintf("moved from %s to %s", rc.Map.NameOf(obs.Start), f.RetreatedTo)
+		f.RetreatedTo = ""
+	}
+	if f.Refused && rc.Draw() < p {
+		omitted = append(omitted, "refusing the order to "+f.RefusedOrder)
+		f.Refused, f.RefusedOrder = false, ""
+	}
+	return omitted
 }
 
 func outcome(obs engine.Observation, m *mapdata.Map) string {

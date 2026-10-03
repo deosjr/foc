@@ -112,6 +112,7 @@ type DebugView struct {
 	Order           string
 	OrderSource     string
 	Rows            []DistortRow // true vs observed vs reported
+	Omitted         []string     // bad news left out of the report
 	Attempts        int
 	Violations      [][]string
 	FellBack        bool
@@ -135,6 +136,9 @@ type InterpView struct {
 	Order      string
 	Rationale  string
 	Error      string
+	Initiative float64
+	RefuseDraw float64
+	Refused    string
 }
 
 type Prob struct {
@@ -191,12 +195,13 @@ func buildDebug(g *game.Game, d *game.TurnDebug) *DebugView {
 			LetterID: in.LetterID, Engagement: in.Parsed.Engagement, Addressed: in.Parsed.Addressed,
 			Plausible: in.Parsed.Plausible, Draw: in.RNGDraw, Step: in.Step, Outcome: in.Outcome,
 			Order: describe(in.Order, m), Rationale: in.Rationale, Error: in.Error,
+			Initiative: in.Initiative, RefuseDraw: in.RefuseDraw,
 		}
 		if l := g.DebugLetter(in.LetterID); l != nil {
 			iv.Letter, iv.SentTurn = l.Body, l.SentTurn
 		}
 		chosen := ""
-		if in.Outcome == generals.OutcomeOrder && in.Order != nil {
+		if in.Outcome == generals.OutcomeOrder && in.Order != nil && !strings.HasPrefix(in.Step, "own-judgement") {
 			switch in.Order.Type {
 			case model.Hold:
 				chosen = "hold"
@@ -208,6 +213,9 @@ func buildDebug(g *game.Game, d *game.TurnDebug) *DebugView {
 		}
 		iv.Action = probs(in.Parsed.Action, nil, name, chosen, 0)
 		iv.Targets = probs(in.Parsed.Target, nil, name, "", 4)
+		if in.Refused != nil {
+			iv.Refused = interpret.DescribeOrder(*in.Refused, m)
+		}
 		if in.Reweighted != nil {
 			iv.Reweighted = probs(in.Reweighted, in.Weights, name, chosen, 0)
 		}
@@ -232,6 +240,7 @@ func buildDebug(g *game.Game, d *game.TurnDebug) *DebugView {
 		dv.Rows = append(dv.Rows, DistortRow{"enemy in " + m.NameOf(s.Province),
 			hundreds(s.TrueStrength), hundreds(s.Strength), rep})
 	}
+	dv.Omitted = d.Omitted
 	dv.FactsJSON = factsJSON(f)
 	return dv
 }

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"math"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -59,6 +60,7 @@ type TurnDebug struct {
 	OrderSource     string                      `json:"order_source"`
 	Observation     engine.Observation          `json:"observation"`
 	Facts           report.ReportFacts          `json:"facts"`
+	Omitted         []string                    `json:"omitted,omitempty"`
 	Written         report.Written              `json:"written"`
 }
 
@@ -92,7 +94,8 @@ type Game struct {
 	standingSource map[string]string
 	gone           map[string]bool // generals whose army has been destroyed (truth)
 	debug          map[string]*TurnDebug
-	snapshots      []Snapshot // end of each turn; index 0 is the start
+	snapshots      []Snapshot                // end of each turn; index 0 is the start
+	seen           map[string]map[string]int // general id -> province -> enemy strength he last saw
 }
 
 // Snapshot is belief and truth as they stood at the end of a turn.
@@ -139,6 +142,10 @@ func New(o Options) (*Game, error) {
 	if err != nil {
 		return nil, err
 	}
+	clarify, err := report.LoadPrompts(filepath.Join(cfg.Prompts, "clarification.tmpl"))
+	if err != nil {
+		return nil, err
+	}
 	var rationales *report.RationaleWriter
 	if cfg.Interpretation.Rationale {
 		rp, err := report.LoadPrompts(filepath.Join(cfg.Prompts, "rationale.tmpl"))
@@ -173,6 +180,7 @@ func New(o Options) (*Game, error) {
 		standingSource: map[string]string{},
 		gone:           map[string]bool{},
 		debug:          map[string]*TurnDebug{},
+		seen:           map[string]map[string]int{},
 	}
 	var names []string
 	for _, a := range scn.Armies {
@@ -188,6 +196,11 @@ func New(o Options) (*Game, error) {
 		g.generals[cp.ID] = &cp
 		g.generalOrder = append(g.generalOrder, cp.ID)
 		g.standingSource[cp.ID] = "no orders received yet"
+		// Generals start out knowing the court's intelligence.
+		g.seen[cp.ID] = map[string]int{}
+		for _, in := range scn.Intel {
+			g.seen[cp.ID][in.Province] = in.EnemyStrength
+		}
 		names = append(names, cp.Name)
 	}
 	for _, gen := range all {
@@ -200,6 +213,7 @@ func New(o Options) (*Game, error) {
 	g.writer = &report.Writer{
 		LLM:     o.LLM,
 		Prompts: prompts,
+		Clarify: clarify,
 		Validator: report.Validator{Map: m, MenPerStrength: rules.MenPerStrength, GeneralNames: names,
 			MinWords: cfg.Report.MinWords, MaxWords: cfg.Report.MaxWords},
 		Capital:     m.NameOf(m.Capital(model.Player)),
@@ -285,6 +299,7 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 		g.couriers.Send(&l.Letter, capital, g.generalLocation(gid))
 		g.letters = append(g.letters, l)
 		g.log.Add("dispatch", l.Letter)
+		g.intercept(l)
 	}
 	g.drafts = map[string]string{}
 
@@ -293,7 +308,7 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 	g.log.SetPhase(T, "transit")
 	var arriving []*LetterRecord
 	for _, l := range g.letters {
-		if l.Kind == model.Dispatch && !l.Delivered && l.ArriveTurn <= T {
+		if l.Kind == model.Dispatch && !l.Delivered && !l.Intercepted && l.ArriveTurn <= T {
 			l.Delivered, l.DeliveredTurn = true, T
 			if g.gone[l.To] {
 				g.log.Add("undeliverable", map[string]any{"letter": l.ID, "reason": "army destroyed"})
@@ -318,38 +333,57 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 	g.log.SetPhase(T, "interpretation")
 	orders := map[string]model.Order{}
 	sources := map[string]string{}
-	concerns := map[string][]string{}
+	effective := map[string][]string{} // concerns from the letter that decided the order
+	doubts := map[string][]string{}    // concerns about letters set aside as not genuine
+	refused := map[string]*model.Order{}
+	clarify := map[string]*report.ClarifyFacts{}
 	byGeneral := map[string][]*interpret.Interpretation{}
 	for i, l := range arriving {
 		in := interps[i]
 		gen := g.generals[l.To]
-		in.RNGDraw = g.rngInterp.Float64()
+		// Always three draws per letter, in this order, whichever step decides.
+		dr := generals.Draws{Sample: g.rngInterp.Float64(), Initiative: g.rngInterp.Float64(), Refuse: g.rngInterp.Float64()}
+		in.RNGDraw, in.Initiative, in.RefuseDraw = dr.Sample, dr.Initiative, dr.Refuse
 		if in.Error == "" {
-			sit := generals.Situation{
-				ArmyID: gen.ArmyID, Location: g.state.Armies[gen.ArmyID].Location, Side: model.Player,
-				Map: g.Map, Owner: func(p string) model.Side { return g.state.Provinces[p].Owner },
-			}
-			d := generals.Interpret(in.Parsed, gen.Traits, sit, g.cfg.Interpretation.Thresholds, g.questions.ActionOptions(), in.RNGDraw)
-			in.Outcome, in.Step, in.Order = d.Outcome, d.Step, d.Order
+			d := generals.Interpret(in.Parsed, gen.Traits, g.situation(l.To), g.cfg.Interpretation.Thresholds, g.questions.ActionOptions(), dr)
+			in.Outcome, in.Step, in.Order, in.Refused = d.Outcome, d.Step, d.Order, d.Refused
 			in.Weights, in.Reweighted = d.Weights, d.Reweighted
 		} else {
 			// The general could not make sense of the letter at all.
-			in.Outcome, in.Step = generals.OutcomeUnclear, "error"
+			in.Outcome, in.Step = generals.OutcomeClarify, "error"
 			in.Order = &model.Order{ArmyID: gen.ArmyID, Type: model.Hold}
 		}
 		l.Interpretation = in
 		byGeneral[l.To] = append(byGeneral[l.To], in)
 		g.log.Add("interpretation", in)
+		source := fmt.Sprintf("your letter sent turn %d", l.SentTurn)
+		switch in.Outcome {
+		case generals.OutcomeOrder, generals.OutcomeClarify, generals.OutcomeRefuse:
+			// The later letter wins.
+			orders[l.To], sources[l.To] = *in.Order, source
+			effective[l.To], refused[l.To], clarify[l.To] = nil, nil, nil
+		}
 		switch in.Outcome {
 		case generals.OutcomeOrder:
-			orders[l.To] = *in.Order
-			sources[l.To] = fmt.Sprintf("your letter sent turn %d", l.SentTurn)
-			concerns[l.To] = nil
-		case generals.OutcomeUnclear:
-			orders[l.To] = *in.Order
-			sources[l.To] = fmt.Sprintf("your letter sent turn %d", l.SentTurn)
-			concerns[l.To] = []string{fmt.Sprintf(
-				"I could not make out what you wished me to do from your letter sent turn %d, so I held my position.", l.SentTurn)}
+			if strings.HasPrefix(in.Step, "own-judgement") {
+				effective[l.To] = []string{fmt.Sprintf(
+					"I could not make out what you wished me to do from your letter sent turn %d, so I acted on my own judgement and chose to %s.",
+					l.SentTurn, interpret.DescribeOrder(*in.Order, g.Map))}
+			}
+		case generals.OutcomeClarify:
+			what := "what you would have me do"
+			if in.Step == "no-target" {
+				what = "where you would have me go"
+			}
+			clarify[l.To] = &report.ClarifyFacts{LetterSentTurn: l.SentTurn, YourLetter: l.Body, Unclear: []string{what}}
+		case generals.OutcomeRefuse:
+			refused[l.To] = in.Refused
+		case generals.OutcomeDoubted:
+			before := gen.Traits.Loyalty
+			gen.Traits.Loyalty = math.Max(0, gen.Traits.Loyalty-0.1)
+			g.log.Add("loyalty", map[string]any{"general": l.To, "from": before, "to": gen.Traits.Loyalty, "letter": l.ID})
+			doubts[l.To] = append(doubts[l.To], fmt.Sprintf(
+				"Your letter sent turn %d did not read as if it came from your hand; I have set it aside and keep to my previous orders.", l.SentTurn))
 		}
 	}
 
@@ -415,15 +449,25 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 		if o.Disbanded {
 			g.gone[gid] = true
 		}
+		// What he saw this turn replaces what he saw nearby before.
+		seen := g.seen[gid]
+		for _, p := range append([]string{o.Location}, o.Quiet...) {
+			delete(seen, p)
+		}
+		for _, sgt := range o.Sightings {
+			seen[sgt.Province] = sgt.Strength
+		}
 	}
 	g.log.SetPhase(T, "distortion")
+	omitted := map[string][]string{}
 	for _, gid := range active {
-		f := generals.Distort(obs[gid], g.generals[gid], generals.ReportContext{
+		f, om := generals.Distort(obs[gid], g.generals[gid], generals.ReportContext{
 			Map: g.Map, Rules: g.Rules, GeneralNames: names,
-			OrderSource: sources[gid], Concerns: concerns[gid],
+			OrderSource: sources[gid], Concerns: append(append([]string{}, doubts[gid]...), effective[gid]...),
+			Refused: refused[gid], Clarify: clarify[gid], Draw: g.rngReporting.Float64,
 		})
-		facts[gid] = f
-		g.log.Add("report-facts", map[string]any{"general": gid, "facts": f})
+		facts[gid], omitted[gid] = f, om
+		g.log.Add("report-facts", map[string]any{"general": gid, "facts": f, "omitted": om})
 	}
 
 	// 9. Reporting: letters written concurrently, sent in general order.
@@ -476,16 +520,21 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 	for i, gid := range active {
 		f, w := facts[gid], written[i]
 		seq := g.nextSeq()
+		kind := model.Report
+		if f.Clarification != nil {
+			kind = model.Clarification
+		}
 		l := &LetterRecord{Letter: model.Letter{
-			ID: fmt.Sprintf("L%d", seq), Seq: seq, Kind: model.Report,
+			ID: fmt.Sprintf("L%d", seq), Seq: seq, Kind: kind,
 			From: gid, To: model.Sovereign, Body: w.Text, SentTurn: T,
 		}, Facts: &f, Written: &w}
 		g.couriers.Send(&l.Letter, obs[gid].Location, capital)
 		g.letters = append(g.letters, l)
 		g.log.Add("report", map[string]any{"letter": l.Letter, "written": w})
+		g.intercept(l)
 		g.debug[debugKey(gid, T)] = &TurnDebug{
 			Turn: T, GeneralID: gid, Interpretations: byGeneral[gid],
-			Order: orders[gid], OrderSource: sources[gid], Observation: obs[gid], Facts: f, Written: w,
+			Order: orders[gid], OrderSource: sources[gid], Observation: obs[gid], Facts: f, Omitted: omitted[gid], Written: w,
 		}
 	}
 
@@ -497,7 +546,7 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 	g.log.SetPhase(T, "delivery")
 	var due []*LetterRecord
 	for _, l := range g.letters {
-		if l.Kind != model.Dispatch && !l.Delivered && (l.ArriveTurn <= T || g.state.Over) {
+		if l.Kind != model.Dispatch && !l.Delivered && !l.Intercepted && (l.ArriveTurn <= T || g.state.Over) {
 			due = append(due, l)
 		}
 	}
@@ -526,6 +575,47 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 	g.state.Turn++
 	progress("done")
 	return nil
+}
+
+// intercept rolls for a letter on the road, against the true positions of
+// the enemy at the time it travels. A captured letter is lost silently.
+func (g *Game) intercept(l *LetterRecord) {
+	near := func(p string) bool {
+		for _, n := range append([]string{p}, g.Map.Neighbours(p)...) {
+			for _, a := range g.state.ArmiesIn(n) {
+				if a.Side == model.Enemy {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	if where := g.couriers.Intercept(l.Route, near, g.rngMessaging.Float64); where != "" {
+		l.Intercepted = true
+		g.log.Add("intercepted", map[string]any{"letter": l.ID, "kind": l.Kind, "at": where})
+	}
+}
+
+// situation is what a general knows of his own position and the enemy.
+func (g *Game) situation(gid string) generals.Situation {
+	gen := g.generals[gid]
+	army := g.state.Armies[gen.ArmyID]
+	seen := g.seen[gid]
+	sit := generals.Situation{
+		ArmyID: gen.ArmyID, Location: army.Location, Side: model.Player, Map: g.Map,
+		Owner:     func(p string) model.Side { return g.state.Provinces[p].Owner },
+		Strength:  army.Strength,
+		EnemySeen: func(p string) int { return seen[p] },
+	}
+	best := -1
+	for _, p := range g.Map.IDs() { // sorted, so ties go to the lowest id
+		if seen[p] > 0 {
+			if d := g.Map.Distance(army.Location, p); best < 0 || d < best {
+				best, sit.NearestEnemy = d, p
+			}
+		}
+	}
+	return sit
 }
 
 // interpret asks the decision model about every arriving letter at once.

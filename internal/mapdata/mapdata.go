@@ -229,7 +229,8 @@ type Ruleset struct {
 		Standoff float64 `yaml:"standoff"`
 	} `yaml:"casualties"`
 	Courier struct {
-		ProvincesPerTurn int `yaml:"provinces_per_turn"`
+		ProvincesPerTurn int     `yaml:"provinces_per_turn"`
+		Interception     float64 `yaml:"interception"` // per province on the route near the enemy
 	} `yaml:"courier"`
 	Perception struct {
 		AdjacentStrengthNoise float64 `yaml:"adjacent_strength_noise"`
@@ -241,6 +242,7 @@ type Ruleset struct {
 		CautionScale float64 `yaml:"caution_scale"`
 		VanityOwn    float64 `yaml:"vanity_own"`
 		VanityEnemy  float64 `yaml:"vanity_enemy"`
+		Omission     float64 `yaml:"omission"` // P(omit bad news) = omission × (1 − Honesty)
 	} `yaml:"distortion"`
 	Victory struct {
 		SupplyCentresToWin int `yaml:"supply_centres_to_win"`

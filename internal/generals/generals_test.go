@@ -50,7 +50,7 @@ func TestSpecWorkedExample(t *testing.T) {
 	// unclear. Use a lower threshold here to check the reweighting maths.
 	th := th
 	th.Unclear = 0.35
-	ds := Interpret(a, saris, sit(m, "velia"), th, full, 0.5)
+	ds := Interpret(a, saris, sit(m, "velia"), th, full, Draws{Sample: 0.5, Initiative: 1, Refuse: 1})
 	if ds.Step != "ambiguous" {
 		t.Fatalf("step = %s", ds.Step)
 	}
@@ -60,7 +60,7 @@ func TestSpecWorkedExample(t *testing.T) {
 	if !near(ds.Reweighted["move"], 0.285) {
 		t.Errorf("Saris marches with p=%.3f, spec says ~0.28", ds.Reweighted["move"])
 	}
-	dv := Interpret(a, velk, sit(m, "velia"), th, full, 0.5)
+	dv := Interpret(a, velk, sit(m, "velia"), th, full, Draws{Sample: 0.5, Initiative: 1, Refuse: 1})
 	if !near(dv.Reweighted["move"], 0.577) {
 		t.Errorf("Velk marches with p=%.3f, spec says ~0.58", dv.Reweighted["move"])
 	}
@@ -83,7 +83,7 @@ func TestInterpretSteps(t *testing.T) {
 	}{
 		{
 			name:   "not addressed keeps standing order",
-			a:      interpret.Answers{Addressed: 0.2, Action: map[string]float64{"hold": 1}},
+			a:      interpret.Answers{Plausible: 0.9, Addressed: 0.2, Action: map[string]float64{"hold": 1}},
 			traits: velk, loc: "velia", outcome: OutcomeIgnored, step: "not-addressed",
 		},
 		{
@@ -101,19 +101,19 @@ func TestInterpretSteps(t *testing.T) {
 		{
 			name:   "unclear top answer holds",
 			a:      base(map[string]float64{"unclear": 0.6, "hold": 0.4}, map[string]float64{"none": 1}),
-			traits: velk, loc: "velia", outcome: OutcomeUnclear, step: "unclear",
+			traits: velk, loc: "velia", outcome: OutcomeClarify, step: "unclear",
 			order: model.Order{ArmyID: "a", Type: model.Hold},
 		},
 		{
 			name:   "flat distribution is unclear",
 			a:      base(map[string]float64{"hold": 0.35, "move": 0.35, "retreat": 0.3}, map[string]float64{"oros": 1}),
-			traits: velk, loc: "velia", outcome: OutcomeUnclear, step: "unclear",
+			traits: velk, loc: "velia", outcome: OutcomeClarify, step: "unclear",
 			order: model.Order{ArmyID: "a", Type: model.Hold},
 		},
 		{
 			name:   "move without a target falls back to unclear",
 			a:      base(map[string]float64{"move": 0.95, "hold": 0.05}, map[string]float64{"unclear": 0.7, "oros": 0.3}),
-			traits: velk, loc: "velia", outcome: OutcomeUnclear, step: "no-target",
+			traits: velk, loc: "velia", outcome: OutcomeClarify, step: "no-target",
 			order: model.Order{ArmyID: "a", Type: model.Hold},
 		},
 		{
@@ -155,7 +155,7 @@ func TestInterpretSteps(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			d := Interpret(c.a, c.traits, sit(m, c.loc), th, poc, c.draw)
+			d := Interpret(c.a, c.traits, sit(m, c.loc), th, poc, Draws{Sample: c.draw, Initiative: 1, Refuse: 1})
 			if d.Outcome != c.outcome || d.Step != c.step {
 				t.Fatalf("got %s/%s, want %s/%s", d.Outcome, d.Step, c.outcome, c.step)
 			}
@@ -175,9 +175,9 @@ func TestInterpretSteps(t *testing.T) {
 // Moving within the player's own lands is not an aggressive act.
 func TestMoveHomeIsNeutral(t *testing.T) {
 	m := loadMap(t)
-	a := interpret.Answers{Addressed: 1, Engagement: 0.5,
+	a := interpret.Answers{Plausible: 0.9, Addressed: 1, Engagement: 0.5,
 		Action: map[string]float64{"hold": 0.5, "move": 0.5}, Target: map[string]float64{"karsa": 1}}
-	d := Interpret(a, velk, sit(m, "velia"), th, poc, 0)
+	d := Interpret(a, velk, sit(m, "velia"), th, poc, Draws{Initiative: 1, Refuse: 1})
 	if d.Weights["move"] != 1 {
 		t.Errorf("move home weighted %v, want 1", d.Weights["move"])
 	}
@@ -198,8 +198,8 @@ func TestDistort(t *testing.T) {
 		Friendly:  []engine.Contact{{GeneralID: "saris", Province: "velia"}},
 	}
 	rc := ReportContext{Map: m, Rules: r, GeneralNames: map[string]string{"saris": "Ione Saris"}, OrderSource: "letter sent turn 4"}
-	fv := Distort(obs, &model.General{Name: "Damar Velk", Traits: velk}, rc)
-	fs := Distort(obs, &model.General{Name: "Ione Saris", Traits: saris}, rc)
+	fv, _ := Distort(obs, &model.General{Name: "Damar Velk", Traits: velk}, rc)
+	fs, _ := Distort(obs, &model.General{Name: "Ione Saris", Traits: saris}, rc)
 	// Velk: own losses 4*(1-0.48)=2.08 -> 2; enemy losses 10*1.48 -> 15; sighting 20*0.72=14.4 -> 15.
 	if fv.OwnLosses != 2 || fv.Battles[0].EnemyLosses != 15 || fv.Sightings[0].EnemyStrength != 15 {
 		t.Errorf("velk facts: losses %d, enemy losses %d, sighting %d", fv.OwnLosses, fv.Battles[0].EnemyLosses, fv.Sightings[0].EnemyStrength)
@@ -213,5 +213,97 @@ func TestDistort(t *testing.T) {
 	}
 	if fv.FriendlyContacts[0].General != "Ione Saris" {
 		t.Errorf("contacts: %+v", fv.FriendlyContacts)
+	}
+}
+
+func TestFriction(t *testing.T) {
+	m := loadMap(t)
+	unclearLetter := interpret.Answers{Plausible: 0.9, Addressed: 0.9, Engagement: 0.5,
+		Action: map[string]float64{"unclear": 0.7, "hold": 0.3}, Target: map[string]float64{"none": 1}}
+	withEnemy := sit(m, "velia")
+	withEnemy.NearestEnemy = "marren"
+
+	t.Run("unclear: low initiative draw acts on own judgement", func(t *testing.T) {
+		d := Interpret(unclearLetter, velk, withEnemy, th, poc, Draws{Initiative: 0.5, Refuse: 1})
+		if d.Outcome != OutcomeOrder || d.Step != "own-judgement:unclear" || !d.Unclear() {
+			t.Fatalf("got %s/%s", d.Outcome, d.Step)
+		}
+		if *d.Order != (model.Order{ArmyID: "a", Type: model.MoveToward, Target: "marren"}) {
+			t.Errorf("aggressive Velk should march on the nearest enemy he saw: %v", d.Order)
+		}
+	})
+	t.Run("unclear: cautious own judgement holds", func(t *testing.T) {
+		d := Interpret(unclearLetter, saris, withEnemy, th, poc, Draws{Initiative: 0.1, Refuse: 1})
+		if d.Outcome != OutcomeOrder || d.Order.Type != model.Hold {
+			t.Errorf("got %s %v", d.Outcome, d.Order)
+		}
+	})
+	t.Run("unclear: high initiative draw asks for clarification", func(t *testing.T) {
+		d := Interpret(unclearLetter, velk, withEnemy, th, poc, Draws{Initiative: 0.7, Refuse: 1})
+		if d.Outcome != OutcomeClarify || d.Order.Type != model.Hold || !d.Unclear() {
+			t.Errorf("got %s/%s %v", d.Outcome, d.Step, d.Order)
+		}
+	})
+	t.Run("implausible letter is doubted", func(t *testing.T) {
+		a := unclearLetter
+		a.Plausible = 0.2
+		if d := Interpret(a, velk, withEnemy, th, poc, Draws{}); d.Outcome != OutcomeDoubted || d.Order != nil {
+			t.Errorf("got %s %v", d.Outcome, d.Order)
+		}
+	})
+	attack := interpret.Answers{Plausible: 0.9, Addressed: 0.9, Engagement: 0.9,
+		Action: map[string]float64{"move": 0.95, "hold": 0.05}, Target: map[string]float64{"marren": 1}}
+	strongEnemy := sit(m, "hollow")
+	strongEnemy.Strength = 20
+	strongEnemy.EnemySeen = func(p string) int { return map[string]int{"marren": 30}[p] }
+	disloyal := velk
+	disloyal.Loyalty = 0.1 // refuses with p = (0.3 - 0.1) * 3 = 0.6
+	t.Run("disloyal general refuses a risky attack", func(t *testing.T) {
+		d := Interpret(attack, disloyal, strongEnemy, th, poc, Draws{Refuse: 0.5})
+		if d.Outcome != OutcomeRefuse || d.Order.Type != model.Hold || d.Refused.Target != "marren" {
+			t.Errorf("got %s %v refused %v", d.Outcome, d.Order, d.Refused)
+		}
+	})
+	t.Run("disloyal general obeys when the draw is high", func(t *testing.T) {
+		if d := Interpret(attack, disloyal, strongEnemy, th, poc, Draws{Refuse: 0.7}); d.Outcome != OutcomeOrder {
+			t.Errorf("got %s", d.Outcome)
+		}
+	})
+	t.Run("loyal general never refuses", func(t *testing.T) {
+		if d := Interpret(attack, velk, strongEnemy, th, poc, Draws{Refuse: 0}); d.Outcome != OutcomeOrder {
+			t.Errorf("got %s", d.Outcome)
+		}
+	})
+}
+
+func TestOmissions(t *testing.T) {
+	m := loadMap(t)
+	r, _ := mapdata.LoadRuleset("../../rulesets/ancient.yaml")
+	lost := engine.Observation{
+		Turn: 3, Start: "velia", Location: "velia", Strength: 21, Losses: 9,
+		Order:   model.Order{ArmyID: "a", Type: model.MoveToward, Target: "hollow"},
+		Blocked: &engine.Bounce{Army: "a", Target: "hollow", Reason: "lost"},
+		Battles: []engine.ObservedBattle{{Place: "hollow", Result: "lost", EnemyLosses: 3}},
+	}
+	rc := ReportContext{Map: m, Rules: r, OrderSource: "letter"}
+	always := func() float64 { return 0 }
+	never := func() float64 { return 0.99 }
+
+	rc.Draw = always
+	f, om := Distort(lost, &model.General{Name: "Damar Velk", Traits: velk}, rc)
+	if len(om) != 1 || len(f.Battles) != 0 || f.OwnLosses != 0 || f.OrderOutcome != "held Velia" {
+		t.Errorf("hidden defeat: omitted %v, facts %+v", om, f)
+	}
+	rc.Draw = never
+	f, om = Distort(lost, &model.General{Name: "Damar Velk", Traits: velk}, rc)
+	if len(om) != 0 || len(f.Battles) != 1 {
+		t.Errorf("honest report: omitted %v, battles %v", om, f.Battles)
+	}
+	// Honesty 1 means p = 0: even a zero draw keeps the truth.
+	honest := saris
+	honest.Honesty = 1
+	rc.Draw = always
+	if _, om = Distort(lost, &model.General{Name: "Ione Saris", Traits: honest}, rc); len(om) != 0 {
+		t.Errorf("a perfectly honest general omitted %v", om)
 	}
 }

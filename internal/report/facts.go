@@ -25,6 +25,15 @@ type ReportFacts struct {
 	FriendlyContacts []ContactFacts  `json:"friendly_contacts"`
 	Concerns         []string        `json:"concerns"`
 	Refused          bool            `json:"refused"`
+	RefusedOrder     string          `json:"refused_order,omitempty"`
+	Clarification    *ClarifyFacts   `json:"clarification_needed,omitempty"`
+}
+
+// ClarifyFacts is what a general could not make out of a letter.
+type ClarifyFacts struct {
+	LetterSentTurn int      `json:"letter_sent_turn"`
+	YourLetter     string   `json:"your_letter"`
+	Unclear        []string `json:"unclear"` // e.g. "where you would have me go"
 }
 
 // BattleFacts is one battle as reported.
@@ -50,6 +59,9 @@ type ContactFacts struct {
 // Numbers returns every integer stated in the facts.
 func (f ReportFacts) Numbers() []int {
 	nums := []int{f.WrittenTurn, f.OwnStrength, f.OwnLosses}
+	if f.Clarification != nil {
+		nums = append(nums, f.Clarification.LetterSentTurn)
+	}
 	for _, b := range f.Battles {
 		nums = append(nums, b.EnemyLosses)
 	}
@@ -73,5 +85,10 @@ func (f ReportFacts) Text() string {
 		parts = append(parts, c.General, c.Province)
 	}
 	parts = append(parts, f.Concerns...)
+	parts = append(parts, f.RefusedOrder)
+	if c := f.Clarification; c != nil {
+		parts = append(parts, c.YourLetter)
+		parts = append(parts, c.Unclear...)
+	}
 	return strings.Join(parts, "\n")
 }

@@ -4,7 +4,7 @@
 
 {{define "letter"}}<article class="letter" id="card-{{.ID}}">
   <header>
-    <strong>{{.FromName}}</strong>
+    <strong>{{.FromName}}</strong>{{if eq (print .Kind) "clarification"}} <span class="kind">asks for clarification</span>{{end}}
     <span class="stamp">written turn {{.WrittenTurn}}, arrived turn {{.ArrivedTurn}}</span>
     {{if .Mentions}}<button class="show" hx-get="/map?highlight={{.ID}}" hx-target="#map" title="Mark the places this letter names">show on map</button>{{end}}
   </header>
@@ -28,13 +28,14 @@
       <table><caption>Target</caption>{{range .Targets}}<tr><td>{{.Key}}</td><td>{{pct .P}}</td></tr>{{end}}</table>
       {{if .Reweighted}}<table><caption>Reweighted</caption>{{range .Reweighted}}<tr{{if .Chosen}} class="chosen"{{end}}><td>{{.Key}}</td><td>×{{f2 .Weight}}</td><td>{{pct .P}}</td></tr>{{end}}</table>{{end}}
     </div>
-    <p>draw {{f2 .Draw}} → step <b>{{.Step}}</b> → {{.Outcome}}: {{.Order}}</p>
+    <p>draws {{f2 .Draw}} / initiative {{f2 .Initiative}} / refusal {{f2 .RefuseDraw}} → step <b>{{.Step}}</b> → {{.Outcome}}: {{.Order}}{{if .Refused}} <span class="warn">(refused: {{.Refused}})</span>{{end}}</p>
     {{if .Rationale}}<p class="rationale">“{{.Rationale}}”</p>{{end}}
   </div>{{end}}
   {{if .Rows}}<table class="distort"><caption>Distortion</caption>
     <tr><th></th><th>true</th><th>seen</th><th>reported</th></tr>
     {{range .Rows}}<tr><td>{{.What}}</td><td>{{.True}}</td><td>{{.Observed}}</td><td>{{.Reported}}</td></tr>{{end}}
   </table>{{end}}
+  {{if .Omitted}}<p class="warn">Left out of the report: {{join .Omitted}}.</p>{{end}}
   <p>Report: {{.Attempts}} attempt{{if ne .Attempts 1}}s{{end}}{{if .FellBack}}, <b class="warn">fell back to the template letter</b>{{end}}{{if .Error}}, error: {{.Error}}{{end}}</p>
   {{range .Violations}}<p class="warn">Rejected: {{join .}}</p>{{end}}
   <details><summary>Facts given to the LLM</summary><pre>{{.FactsJSON}}</pre></details>

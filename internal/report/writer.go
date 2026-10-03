@@ -16,6 +16,7 @@ import (
 type Writer struct {
 	LLM         llm.Model
 	Prompts     *template.Template // defines "system" and "user"
+	Clarify     *template.Template // the same, for reports that ask for clarification
 	Validator   Validator
 	Capital     string // display name of the sovereign's seat
 	MaxTokens   int
@@ -64,10 +65,14 @@ func (w *Writer) Request(g *model.General, f ReportFacts) (llm.Request, error) {
 		"MaxWords":  w.Validator.MaxWords,
 	}
 	var sys, user bytes.Buffer
-	if err := w.Prompts.ExecuteTemplate(&sys, "system", data); err != nil {
+	t := w.Prompts
+	if f.Clarification != nil && w.Clarify != nil {
+		t = w.Clarify
+	}
+	if err := t.ExecuteTemplate(&sys, "system", data); err != nil {
 		return llm.Request{}, err
 	}
-	if err := w.Prompts.ExecuteTemplate(&user, "user", data); err != nil {
+	if err := t.ExecuteTemplate(&user, "user", data); err != nil {
 		return llm.Request{}, err
 	}
 	return llm.Request{

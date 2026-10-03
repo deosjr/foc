@@ -163,3 +163,62 @@ func TestSave(t *testing.T) {
 		}
 	}
 }
+
+func TestInterceptedLetterIsNeverRead(t *testing.T) {
+	g, log := newTestGame(t)
+	g.Rules.Courier.Interception = 1
+	g.DebugTruth().Armies["e-1"].Location = "hollow" // next to Velia and Duna Hills
+	g.SetDraft("velk", "March on Oros Ford.")
+	if err := g.EndTurn(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range g.Letters() {
+		if l.Kind == "dispatch" && (!l.Intercepted || l.Interpretation != nil) {
+			t.Errorf("dispatch %s: intercepted=%v interpreted=%v", l.ID, l.Intercepted, l.Interpretation != nil)
+		}
+	}
+	if s := g.Sent(); len(s) != 1 || s[0].ReplyID != "" {
+		t.Errorf("an intercepted letter can have no reply: %+v", s)
+	}
+	// Reports pass the enemy too, so they are lost as well; the inbox stays empty.
+	if n := len(g.Inbox()); n != 0 {
+		t.Errorf("inbox has %d letters, want 0", n)
+	}
+	if !strings.Contains(string(log.Bytes()), `"kind":"intercepted"`) {
+		t.Error("interception not logged")
+	}
+}
+
+func TestUnclearLetterAsksForClarification(t *testing.T) {
+	// "March!" names no place: Saris (initiative 0.25) usually asks, and
+	// sometimes acts on her own judgement. Try seeds until she asks.
+	for seed := uint64(1); seed <= 20; seed++ {
+		c := testConfig()
+		c.Seed = seed
+		g, err := New(Options{Config: c, Decision: dmock.New(), LLM: lmock.New(), RunDir: t.TempDir()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		g.SetDraft("saris", "March!")
+		if err := g.EndTurn(context.Background(), nil); err != nil {
+			t.Fatal(err)
+		}
+		in := g.Letters()[0].Interpretation
+		if in.Outcome != "clarify" {
+			if !strings.HasPrefix(in.Step, "own-judgement") {
+				t.Fatalf("seed %d: unclear letter gave %s/%s", seed, in.Outcome, in.Step)
+			}
+			continue
+		}
+		for _, l := range g.Inbox() {
+			if l.From == "saris" {
+				if l.Kind != "clarification" || !strings.Contains(l.Body, "where you would have me go") {
+					t.Errorf("clarification letter: kind %s\n%s", l.Kind, l.Body)
+				}
+				return
+			}
+		}
+		t.Fatal("no letter from Saris")
+	}
+	t.Fatal("Saris never asked for clarification in 20 seeds")
+}

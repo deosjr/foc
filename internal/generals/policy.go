@@ -5,6 +5,7 @@ package generals
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/deosjr/foc/internal/interpret"
 	"github.com/deosjr/foc/internal/mapdata"
@@ -20,9 +21,11 @@ type Thresholds struct {
 
 // Outcomes of interpretation.
 const (
-	OutcomeOrder   = "order"
-	OutcomeUnclear = "unclear" // PoC: the general holds; clarification letters come later
+	OutcomeOrder   = "order"   // the general carries out an order (perhaps of his own devising)
+	OutcomeClarify = "clarify" // he holds and writes back asking what was meant
+	OutcomeRefuse  = "refuse"  // he quietly refuses a risky order and holds
 	OutcomeIgnored = "ignored" // the letter carried no instruction
+	OutcomeDoubted = "doubted" // the letter did not read as genuine; set aside
 )
 
 // Action options the policy understands.
@@ -33,13 +36,28 @@ const (
 	ActUnclear = "unclear"
 )
 
-// Situation is what the policy needs to know about the general's position.
+// Draws are the uniform [0,1) numbers the policy may use, all taken from the
+// interpretation stream for every letter whichever step decides, so the
+// streams stay aligned.
+type Draws struct {
+	Sample     float64 `json:"sample"`     // step 5: which reading of an ambiguous letter
+	Initiative float64 `json:"initiative"` // step 4: own judgement or ask
+	Refuse     float64 `json:"refuse"`     // step 8: quiet refusal
+}
+
+// Situation is what the policy needs to know about the general's position
+// and what he believes about the enemy.
 type Situation struct {
 	ArmyID   string
 	Location string
 	Side     model.Side
 	Map      *mapdata.Map
 	Owner    func(province string) model.Side
+	Strength int
+	// EnemySeen is the enemy strength the general last saw in a province
+	// (0 if none). NearestEnemy is the closest such province, or "".
+	EnemySeen    func(province string) int
+	NearestEnemy string
 }
 
 // Decision is the policy's output plus everything needed to explain it.
@@ -49,18 +67,28 @@ type Decision struct {
 	Action     string             `json:"action,omitempty"`
 	Target     string             `json:"target,omitempty"`
 	Order      *model.Order       `json:"order,omitempty"`
+	Refused    *model.Order       `json:"refused,omitempty"` // the order he would not carry out
 	Weights    map[string]float64 `json:"weights,omitempty"` // per-action multipliers in the ambiguous case
 	Reweighted map[string]float64 `json:"reweighted,omitempty"`
-	Draw       float64            `json:"draw"`
+	Draws      Draws              `json:"draws"`
 }
 
-// Interpret applies the PoC interpretation policy (steps 2, 3, 4, 5 and 7).
-// draw is a uniform [0,1) number from the interpretation RNG stream; the
-// caller always draws one per letter so streams stay aligned whichever step
-// decides.
-func Interpret(a interpret.Answers, t model.Traits, sit Situation, th Thresholds, actionOrder []string, draw float64) Decision {
-	d := Decision{Draw: draw}
+// Unclear reports whether the general could not make out the letter, whether
+// he then asked or acted on his own judgement.
+func (d Decision) Unclear() bool {
+	return d.Outcome == OutcomeClarify || strings.HasPrefix(d.Step, "own-judgement")
+}
 
+// Interpret applies the interpretation policy, steps 1 to 8.
+func Interpret(a interpret.Answers, t model.Traits, sit Situation, th Thresholds, actionOrder []string, dr Draws) Decision {
+	d := Decision{Draws: dr}
+
+	// Step 1: a letter that does not read as genuine is set aside. The
+	// caller lowers loyalty and has the next report say so.
+	if a.Plausible < th.Plausibility {
+		d.Outcome, d.Step = OutcomeDoubted, "implausible"
+		return d
+	}
 	// Step 2: a letter with no instruction leaves the standing order alone.
 	if a.Addressed < 0.5 {
 		d.Outcome, d.Step = OutcomeIgnored, "not-addressed"
@@ -70,8 +98,7 @@ func Interpret(a interpret.Answers, t model.Traits, sit Situation, th Thresholds
 	top, pTop := interpret.Top(a.Action, actionOrder)
 	switch {
 	case top == ActUnclear || pTop < th.Unclear:
-		// Step 4, PoC: an unclear letter means hold.
-		return unclear(d, sit, "unclear")
+		return unclear(d, t, sit, "unclear")
 	case pTop >= th.Clear:
 		// Step 3: a clear order; personality does not matter.
 		d.Action, d.Step = top, "clear"
@@ -99,12 +126,12 @@ func Interpret(a interpret.Answers, t model.Traits, sit Situation, th Thresholds
 			sum += d.Reweighted[act]
 		}
 		if sum <= 0 {
-			return unclear(d, sit, "ambiguous-empty")
+			return unclear(d, t, sit, "ambiguous-empty")
 		}
 		for k := range d.Reweighted {
 			d.Reweighted[k] /= sum
 		}
-		d.Action = sample(d.Reweighted, actionOrder, draw)
+		d.Action = sample(d.Reweighted, actionOrder, dr.Sample)
 	}
 
 	// Step 7: parameters from the target question.
@@ -114,7 +141,7 @@ func Interpret(a interpret.Answers, t model.Traits, sit Situation, th Thresholds
 	case ActMove:
 		target := topTarget(a, sit.Map)
 		if target == interpret.None || target == interpret.Unclear {
-			return unclear(d, sit, "no-target")
+			return unclear(d, t, sit, "no-target")
 		}
 		d.Target = target
 		if target != sit.Location {
@@ -139,17 +166,47 @@ func Interpret(a interpret.Answers, t model.Traits, sit Situation, th Thresholds
 			order = model.Order{ArmyID: sit.ArmyID, Type: model.Retreat, Target: step}
 		}
 	default:
-		return unclear(d, sit, "unknown-action")
+		return unclear(d, t, sit, "unknown-action")
+	}
+
+	// Step 8: a disloyal general may quietly refuse to attack a place he
+	// believes is stronger than his own army.
+	if t.Loyalty < 0.3 && order.Type == model.MoveToward && sit.EnemySeen != nil {
+		next := sit.Map.NextStep(sit.Location, order.Target)
+		if sit.EnemySeen(next) > sit.Strength && dr.Refuse < (0.3-t.Loyalty)*3 {
+			refused := order
+			d.Outcome, d.Step = OutcomeRefuse, "refused"
+			d.Refused = &refused
+			d.Order = &model.Order{ArmyID: sit.ArmyID, Type: model.Hold}
+			return d
+		}
 	}
 	d.Outcome = OutcomeOrder
 	d.Order = &order
 	return d
 }
 
-func unclear(d Decision, sit Situation, step string) Decision {
-	d.Outcome, d.Step = OutcomeUnclear, step
+// unclear is step 4: with probability Initiative the general acts on his own
+// judgement (step 6); otherwise he holds and asks for clarification.
+func unclear(d Decision, t model.Traits, sit Situation, why string) Decision {
+	if d.Draws.Initiative < t.Initiative {
+		d.Outcome, d.Step = OutcomeOrder, "own-judgement:"+why
+		d.Order = OwnJudgement(t, sit)
+		return d
+	}
+	d.Outcome, d.Step = OutcomeClarify, why
 	d.Order = &model.Order{ArmyID: sit.ArmyID, Type: model.Hold}
 	return d
+}
+
+// OwnJudgement is step 6, a tiny per-general heuristic: an aggressive
+// general marches on the nearest enemy he has seen; anyone else holds.
+// (Cautious generals will entrench once Entrench exists.)
+func OwnJudgement(t model.Traits, sit Situation) *model.Order {
+	if t.Aggression > t.Caution && t.Aggression >= 0.5 && sit.NearestEnemy != "" {
+		return &model.Order{ArmyID: sit.ArmyID, Type: model.MoveToward, Target: sit.NearestEnemy}
+	}
+	return &model.Order{ArmyID: sit.ArmyID, Type: model.Hold}
 }
 
 type cat int

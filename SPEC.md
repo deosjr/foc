@@ -664,7 +664,7 @@ fog-of-command/
 *Later phases*, reordered so the tools for judging friction arrive before the friction itself, and the letter loop deepens before the rules do:
 
 5. **Review and polish.** Rationales, the `/review` page with side-by-side maps, SSE progress, route overlay. (The recognised-names line already shipped with milestone 2.) *(Status: done.)*
-6. **Full friction.** Interception, clarification letters, plausibility and loyalty handling, honesty-driven omissions, standing orders beyond movement.
+6. **Full friction.** Interception, clarification letters, plausibility and loyalty handling, honesty-driven omissions, standing orders beyond movement. *(Status: done, with these choices: a clarification request travels as that turn's report, with kind `clarification`, so the player never loses a turn's news; own judgement marches on the nearest enemy the general has himself seen; hiding a lost battle also hides its dead; interception is rolled against the enemy's true positions when the letter sets out. The only standing order beyond movement is `Entrench`, which arrives with milestone 7.)*
 7. **Full rules.** `Support`, `Entrench`, `Scout`, the third general, the heuristic enemy AI, the full map and 20 turns. Hesk needs the own-judgement step from milestone 6.
 8. **More providers.** `jev`, the remaining LLM adapters, exact record/replay. The `jev` adapter waits on TypeSafe's API docs and a key.
 9. **Conditional orders.** Trigger-plus-action standing orders and the questions to extract them. Needs design decisions first: which triggers generals recognise, how many conditions a letter may carry, and what happens when a trigger fires while a letter is in transit.

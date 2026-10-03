@@ -126,3 +126,4 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; }
 .rationale { font-family: var(--serif); font-style: italic; }
 .progress { display: inline-flex; align-items: center; gap: .5rem; color: var(--muted); font-style: italic; }
 .progress .spin { width: .9rem; height: .9rem; border: 2px solid var(--rule); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }
+.letter .kind { font-size: .75rem; color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; padding: 0 .3rem; }
