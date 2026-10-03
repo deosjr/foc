@@ -47,7 +47,7 @@ func runEval(args []string) error {
 	if err != nil {
 		return err
 	}
-	dm, _, err := wiring.Models(cfg, runlog.New(), "")
+	dm, _, _, err := wiring.Models(cfg, runlog.New())
 	if err != nil {
 		return err
 	}

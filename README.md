@@ -46,9 +46,12 @@ to sign in, then `cp config.claudecli.example.yaml config.yaml`.
 An 8B model is good enough to exercise the whole pipeline, but expect 15–45
 seconds a turn and weaker readings than Claude.
 
-Set `cache_file` to cache real model responses across runs while developing,
-and `mode: record` to write every response to the run directory so a game can
-be replayed with `--replay runs/<dir>`.
+Set `cache_file` to cache real model responses across runs while developing.
+
+Every game saves itself to `runs/<time>-<seed>/` after each turn, with every
+model response recorded. `go run ./cmd/foc --replay runs/<dir>` replays it
+without calling any model and checks that it reproduces the original
+`turns.jsonl` exactly.
 
 ## Evaluate a decision provider
 

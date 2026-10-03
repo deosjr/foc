@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	stdlog "log"
 	"math"
 	"math/rand/v2"
 	"os"
@@ -38,6 +39,9 @@ type Options struct {
 	LLM      llm.Model
 	Log      *runlog.Log
 	RunDir   string
+	// Recorder holds every model response of the run; Save writes it as
+	// responses.jsonl so the run can be replayed exactly. May be nil.
+	Recorder interface{ WriteFile(path string) error }
 }
 
 // LetterRecord is a letter plus everything the game knows about it.
@@ -85,6 +89,7 @@ type Game struct {
 	decision     decision.Model
 	log          *runlog.Log
 	runDir       string
+	recorder     interface{ WriteFile(path string) error }
 
 	rngMessaging, rngInterp, rngPerception, rngReporting *rand.Rand
 
@@ -171,6 +176,7 @@ func New(o Options) (*Game, error) {
 		rationales:     rationales,
 		log:            o.Log,
 		runDir:         o.RunDir,
+		recorder:       o.Recorder,
 		rngMessaging:   stream(cfg.Seed, "messaging"),
 		rngInterp:      stream(cfg.Seed, "interpretation"),
 		rngPerception:  stream(cfg.Seed, "perception"),
@@ -572,12 +578,25 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 	g.snapshot(T)
 	if g.state.Over {
 		g.log.Add("game-over", map[string]any{"winner": g.state.Winner, "outcome": g.state.Outcome})
+		g.autosave()
 		progress("done")
 		return nil
 	}
 	g.state.Turn++
+	g.autosave()
 	progress("done")
 	return nil
+}
+
+// autosave writes the run directory after every turn, so any game can be
+// inspected and replayed afterwards. A failed save never stops the game.
+func (g *Game) autosave() {
+	if g.runDir == "" {
+		return
+	}
+	if _, err := g.Save(); err != nil {
+		stdlog.Printf("autosave to %s failed: %v", g.runDir, err)
+	}
 }
 
 // intercept rolls for a letter on the road, against the true positions of
@@ -680,8 +699,8 @@ func (g *Game) interpret(ctx context.Context, T int, arriving []*LetterRecord) [
 
 func debugKey(gid string, turn int) string { return fmt.Sprintf("%s/%d", gid, turn) }
 
-// Save writes the run directory: config, turn log and final state.
-// responses.jsonl is written as the game goes, in record mode.
+// Save writes the run directory: config, turn log, state and the recorded
+// model responses.
 func (g *Game) Save() (string, error) {
 	if g.runDir == "" {
 		return "", errors.New("no run directory configured")
@@ -705,6 +724,11 @@ func (g *Game) Save() (string, error) {
 	}
 	if err := os.WriteFile(filepath.Join(g.runDir, "state.json"), st, 0o644); err != nil {
 		return "", err
+	}
+	if g.recorder != nil {
+		if err := g.recorder.WriteFile(filepath.Join(g.runDir, "responses.jsonl")); err != nil {
+			return "", err
+		}
 	}
 	return g.runDir, nil
 }

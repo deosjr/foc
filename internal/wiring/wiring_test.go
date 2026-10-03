@@ -39,7 +39,7 @@ func TestDecisionCacheKeyIncludesTheLLM(t *testing.T) {
 		cfg.CacheFile = cache
 		cfg.Decision.Provider = "llm"
 		cfg.LLM.Provider = name
-		d, _, err := Models(cfg, runlog.New(), "")
+		d, _, _, err := Models(cfg, runlog.New())
 		if err != nil {
 			t.Fatal(err)
 		}

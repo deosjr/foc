@@ -8,6 +8,7 @@ package middleware
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -18,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -85,9 +87,12 @@ func call[Req, Resp any](ctx context.Context, o Options, kind string, req Req, d
 func cached[Req, Resp any](ctx context.Context, o Options, key string, req Req, do func(context.Context, Req) (Resp, error)) (Resp, error) {
 	var resp Resp
 	if o.Replay != nil {
-		raw, ok := o.Replay.Get(key)
-		if !ok {
-			return resp, fmt.Errorf("replay: no recorded response for %s request %s", o.Name, key[:12])
+		raw, failed, ok := o.Replay.Lookup(key)
+		switch {
+		case !ok:
+			return resp, fmt.Errorf("replay: no recorded response for %s request %s (have the prompts, map or config changed since the run?)", o.Name, key[:12])
+		case failed != "":
+			return resp, errors.New(failed) // the call failed when recorded, too
 		}
 		err := json.Unmarshal(raw, &resp)
 		return resp, err
@@ -100,6 +105,9 @@ func cached[Req, Resp any](ctx context.Context, o Options, key string, req Req, 
 	}
 	resp, err := retry(ctx, o, req, do)
 	if err != nil {
+		if o.Record != nil {
+			o.Record.PutError(key, err.Error())
+		}
 		return resp, err
 	}
 	raw, err := json.Marshal(resp)
@@ -190,22 +198,28 @@ func (l *LLM) Complete(ctx context.Context, req llm.Request) (llm.Response, erro
 	return call(ctx, l.Opts, "llm-call", req, l.Inner.Complete)
 }
 
-// Store is a JSON-lines file of recorded responses keyed by request hash.
+// Store holds recorded responses keyed by request hash: in a JSON-lines
+// file (the development cache, a run's responses.jsonl for replay) or in
+// memory (the recorder of a game in progress, written out on save).
 type Store struct {
 	mu       sync.Mutex
-	path     string
-	entries  map[string]json.RawMessage
+	path     string // "" for an in-memory store
+	entries  map[string]storeLine
 	readOnly bool
 }
 
 type storeLine struct {
 	Key      string          `json:"key"`
-	Response json.RawMessage `json:"response"`
+	Response json.RawMessage `json:"response,omitempty"`
+	Error    string          `json:"error,omitempty"`
 }
+
+// NewMemoryStore returns an empty store that lives only in memory.
+func NewMemoryStore() *Store { return &Store{entries: map[string]storeLine{}} }
 
 // OpenStore loads a store, creating its directory if it is writable.
 func OpenStore(path string, readOnly bool) (*Store, error) {
-	s := &Store{path: path, entries: map[string]json.RawMessage{}, readOnly: readOnly}
+	s := &Store{path: path, entries: map[string]storeLine{}, readOnly: readOnly}
 	f, err := os.Open(path)
 	switch {
 	case err == nil:
@@ -215,7 +229,7 @@ func OpenStore(path string, readOnly bool) (*Store, error) {
 		for sc.Scan() {
 			var l storeLine
 			if json.Unmarshal(sc.Bytes(), &l) == nil {
-				s.entries[l.Key] = l.Response
+				s.entries[l.Key] = l
 			}
 		}
 		if err := sc.Err(); err != nil {
@@ -231,31 +245,68 @@ func OpenStore(path string, readOnly bool) (*Store, error) {
 	return s, nil
 }
 
+// Get returns a recorded successful response.
 func (s *Store) Get(key string) (json.RawMessage, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	v, ok := s.entries[key]
-	return v, ok
+	raw, failed, ok := s.Lookup(key)
+	return raw, ok && failed == ""
 }
 
+// Lookup returns a recorded response, or the error the call failed with.
+func (s *Store) Lookup(key string) (raw json.RawMessage, failed string, ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	l, ok := s.entries[key]
+	return l.Response, l.Error, ok
+}
+
+// Put records a successful response. It replaces a recorded failure.
 func (s *Store) Put(key string, v json.RawMessage) error {
+	return s.put(storeLine{Key: key, Response: v})
+}
+
+// PutError records that a call failed, unless it has already succeeded.
+func (s *Store) PutError(key, msg string) error {
+	return s.put(storeLine{Key: key, Error: msg})
+}
+
+func (s *Store) put(l storeLine) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.readOnly {
 		return nil
 	}
-	if _, ok := s.entries[key]; ok {
+	if old, ok := s.entries[l.Key]; ok && (old.Error == "" || l.Error != "") {
 		return nil
 	}
-	s.entries[key] = v
+	s.entries[l.Key] = l
+	if s.path == "" {
+		return nil
+	}
 	f, err := os.OpenFile(s.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	line, _ := json.Marshal(storeLine{Key: key, Response: v})
+	line, _ := json.Marshal(l)
 	_, err = f.Write(append(line, '\n'))
 	return err
+}
+
+// WriteFile writes every entry, sorted by key, as JSON lines.
+func (s *Store) WriteFile(path string) error {
+	s.mu.Lock()
+	keys := make([]string, 0, len(s.entries))
+	for k := range s.entries {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var buf bytes.Buffer
+	for _, k := range keys {
+		line, _ := json.Marshal(s.entries[k])
+		buf.Write(append(line, '\n'))
+	}
+	s.mu.Unlock()
+	return os.WriteFile(path, buf.Bytes(), 0o644)
 }
 
 // Len is the number of stored responses.

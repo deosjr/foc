@@ -19,6 +19,7 @@ import (
 
 	"github.com/deosjr/foc/internal/config"
 	"github.com/deosjr/foc/internal/game"
+	"github.com/deosjr/foc/internal/replay"
 	"github.com/deosjr/foc/internal/runlog"
 	"github.com/deosjr/foc/internal/web"
 	"github.com/deosjr/foc/internal/wiring"
@@ -33,6 +34,9 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 2 && os.Args[1] == "replay" {
+		os.Exit(runReplay(os.Args[2]))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "eval" {
 		if err := runEval(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, "foc eval:", err)
@@ -50,7 +54,7 @@ func run() error {
 	configPath := flag.String("config", "", "config file (default: config.yaml if present, else built-in mock defaults)")
 	seed := flag.Uint64("seed", 0, "random seed (overrides config)")
 	debug := flag.Bool("debug", false, "show the debug drawer and the /debug/truth page")
-	replay := flag.String("replay", "", "run directory to replay model responses from")
+	replay := flag.String("replay", "", "replay a saved run directory and check it reproduces its turns.jsonl")
 	addr := flag.String("addr", "127.0.0.1:8080", "address to listen on")
 	open := flag.Bool("open", false, "open the browser on start")
 	flag.Parse()
@@ -63,15 +67,15 @@ func run() error {
 		cfg.Seed = *seed
 	}
 	if *replay != "" {
-		cfg.Mode, cfg.ReplayFile = "replay", filepath.Join(*replay, "responses.jsonl")
+		os.Exit(runReplay(*replay))
 	}
 	runDir := filepath.Join(cfg.RunsDir, fmt.Sprintf("%s-%d", time.Now().Format("20060102-150405"), cfg.Seed))
 	tlog := runlog.New()
-	dm, lm, err := wiring.Models(cfg, tlog, runDir)
+	dm, lm, recorder, err := wiring.Models(cfg, tlog)
 	if err != nil {
 		return err
 	}
-	g, err := game.New(game.Options{Config: cfg, Decision: dm, LLM: lm, Log: tlog, RunDir: runDir})
+	g, err := game.New(game.Options{Config: cfg, Decision: dm, LLM: lm, Log: tlog, RunDir: runDir, Recorder: recorder})
 	if err != nil {
 		return err
 	}
@@ -128,4 +132,21 @@ func openBrowser(url string) {
 	if err := cmd.Start(); err != nil {
 		log.Printf("could not open browser: %v", err)
 	}
+}
+
+// runReplay replays a run directory and reports whether it reproduced the
+// original log. It returns the process exit code.
+func runReplay(dir string) int {
+	res, err := replay.Run(dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "foc replay:", err)
+		return 1
+	}
+	if res.Identical {
+		fmt.Printf("Replayed %d turns of %s: turns.jsonl reproduced exactly (ignoring latency).\n", res.Turns, dir)
+		return 0
+	}
+	fmt.Printf("Replayed %d turns of %s: logs differ at line %d.\n  original: %.300s\n  replayed: %.300s\nFull replay log: %s\n",
+		res.Turns, dir, res.Line, res.Original, res.Replayed, res.Output)
+	return 2
 }

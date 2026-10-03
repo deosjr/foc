@@ -120,3 +120,27 @@ func (l *Log) Records() []map[string]any {
 	}
 	return out
 }
+
+// StripVolatile removes the fields that legitimately differ between runs
+// (latency) from a turns.jsonl, so two logs can be compared byte for byte.
+func StripVolatile(jsonl []byte) ([]byte, error) {
+	var out bytes.Buffer
+	for _, line := range bytes.Split(bytes.TrimSpace(jsonl), []byte("\n")) {
+		if len(line) == 0 {
+			continue
+		}
+		var rec map[string]any
+		if err := json.Unmarshal(line, &rec); err != nil {
+			return nil, err
+		}
+		if d, ok := rec["data"].(map[string]any); ok {
+			delete(d, "latency_ms")
+		}
+		b, err := json.Marshal(rec)
+		if err != nil {
+			return nil, err
+		}
+		out.Write(append(b, '\n'))
+	}
+	return out.Bytes(), nil
+}

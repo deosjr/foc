@@ -1,7 +1,7 @@
 # Offline configuration: both providers are mocks, so this runs with no
 # network and no API keys. Copy to config.yaml and edit to use real models.
 seed: 42
-mode: live            # live | record | replay
+mode: live            # live | replay (replay is set by foc --replay; responses are always recorded)
 replay_file: ""
 cache_file: ""        # e.g. .cache/responses.jsonl: cache real model calls across runs while developing
 

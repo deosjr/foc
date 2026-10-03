@@ -4,7 +4,6 @@ package wiring
 
 import (
 	"net/http"
-	"path/filepath"
 
 	"github.com/deosjr/foc/internal/config"
 	"github.com/deosjr/foc/internal/providers"
@@ -15,24 +14,23 @@ import (
 )
 
 // Models builds the LLM first (the "llm" decision provider needs it), then
-// the decision model. runDir is where record mode writes responses.jsonl.
-func Models(cfg *config.Config, log *runlog.Log, runDir string) (decision.Model, llm.Model, error) {
+// the decision model. Outside replay mode every response (and failure) is
+// recorded in the returned in-memory store, which the game writes to its run
+// directory as responses.jsonl so the run can be replayed exactly.
+func Models(cfg *config.Config, log *runlog.Log) (decision.Model, llm.Model, *middleware.Store, error) {
 	var cache, replay, record *middleware.Store
 	var err error
 	if cfg.CacheFile != "" && cfg.Mode != "replay" {
 		if cache, err = middleware.OpenStore(cfg.CacheFile, false); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
-	switch cfg.Mode {
-	case "replay":
+	if cfg.Mode == "replay" {
 		if replay, err = middleware.OpenStore(cfg.ReplayFile, true); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-	case "record":
-		if record, err = middleware.OpenStore(filepath.Join(runDir, "responses.jsonl"), false); err != nil {
-			return nil, nil, err
-		}
+	} else {
+		record = middleware.NewMemoryStore()
 	}
 	opts := func(p providers.ProviderConfig) middleware.Options {
 		return middleware.Options{Name: p.Provider, Model: p.Model, Timeout: p.Timeout,
@@ -41,13 +39,13 @@ func Models(cfg *config.Config, log *runlog.Log, runDir string) (decision.Model,
 	deps := providers.Deps{HTTP: &http.Client{}}
 	rawLLM, err := providers.BuildLLM(cfg.LLM, deps)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	l := &middleware.LLM{Inner: rawLLM, Opts: opts(cfg.LLM)}
 	deps.LLM = l
 	rawDecision, err := providers.BuildDecision(cfg.Decision, deps)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	dopts := opts(cfg.Decision)
 	if cfg.Decision.Provider == "llm" {
@@ -56,5 +54,5 @@ func Models(cfg *config.Config, log *runlog.Log, runDir string) (decision.Model,
 		dopts.Model = cfg.LLM.Provider + "/" + cfg.LLM.Model
 	}
 	d := &middleware.Decision{Inner: rawDecision, Opts: dopts}
-	return d, l, nil
+	return d, l, record, nil
 }
