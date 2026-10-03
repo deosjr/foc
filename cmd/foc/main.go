@@ -24,8 +24,11 @@ import (
 	"github.com/deosjr/foc/internal/wiring"
 
 	// Providers register themselves; adding one is one import line.
+	_ "github.com/deosjr/foc/internal/providers/decision/llm"
 	_ "github.com/deosjr/foc/internal/providers/decision/mock"
+	_ "github.com/deosjr/foc/internal/providers/llm/anthropic"
 	_ "github.com/deosjr/foc/internal/providers/llm/mock"
+	_ "github.com/deosjr/foc/internal/providers/llm/openaicompat"
 )
 
 func main() {

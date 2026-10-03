@@ -28,10 +28,10 @@ func New() *Model { return &Model{} }
 
 var keywords = map[string][]string{
 	"move": {"march", "move", "advance", "attack", "take", "seize", "capture", "go", "proceed", "push",
-		"press", "strike", "assault", "occupy", "relieve", "reinforce", "join", "cross", "ride", "head", "invade", "drive"},
+		"press", "strike", "assault", "occupy", "relieve", "reinforce", "join", "cross", "ride", "head", "invade", "drive", "make for", "return to"},
 	"hold": {"hold", "stay", "remain", "defend", "keep", "guard", "stand fast", "stand firm", "wait",
 		"garrison", "dig in", "sit tight"},
-	"retreat": {"retreat", "withdraw", "fall back", "pull back", "abandon", "come home", "return home"},
+	"retreat": {"retreat", "withdraw", "fall back", "pull back", "abandon", "come home", "return home", "pull"},
 }
 
 var hawkish = []string{"attack", "crush", "destroy", "battle", "fight", "strike", "assault", "seize", "smash", "at once", "boldly", "drive"}

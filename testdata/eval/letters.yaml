@@ -1,0 +1,334 @@
+# Labelled letters for `foc eval`. DRAFT: written by Claude for review.
+#
+# Each letter has a context (general, location, optional friendly positions and
+# standing order) and the reading a human would expect:
+#
+#   class: clear      one fair reading. expect.action (+ expect.target for move
+#                     and retreat) is what a human expects; `accept` lists other
+#                     actions that would also be a fair reading.
+#   class: ambiguous  several defensible readings, listed in `readings`. Used to
+#                     check the probability split and that Velk and Saris diverge
+#                     in the direction their traits predict.
+#   class: unclear    no instruction can be made out; the general should hold
+#                     (PoC: hold; later: ask for clarification).
+#   class: none       no instruction at all (news, praise, questions); the
+#                     letter should be ignored and the standing order kept.
+#
+# Actions: hold, move, retreat. Targets are province ids.
+# Locations used: karsa, velia, duna, oros, hollow, marren.
+
+letters:
+  # ---------------------------------------------------------------- clear --
+  - id: c01
+    class: clear
+    general: velk
+    location: velia
+    letter: March on Oros Ford at once.
+    expect: {action: move, target: oros}
+
+  - id: c02
+    class: clear
+    general: saris
+    location: duna
+    letter: Hold Duna Hills. Do not move from there until you hear from me.
+    expect: {action: hold}
+
+  - id: c03
+    class: clear
+    general: velk
+    location: hollow
+    letter: Fall back to Velia.
+    expect: {action: retreat, target: velia}
+    accept: [move]
+
+  - id: c04
+    class: clear
+    general: saris
+    location: duna
+    letter: Take your army to Hollow Wood and occupy it.
+    expect: {action: move, target: hollow}
+
+  - id: c05
+    class: clear
+    general: velk
+    location: velia
+    letter: Attack the enemy at Marren with everything you have.
+    expect: {action: move, target: marren}
+
+  - id: c06
+    class: clear
+    general: saris
+    location: hollow
+    letter: Withdraw to Duna Hills immediately. The wood cannot be held.
+    expect: {action: retreat, target: duna}
+    accept: [move]
+
+  - id: c07
+    class: clear
+    general: velk
+    location: oros
+    letter: Stay where you are and guard the ford.
+    expect: {action: hold}
+
+  - id: c08
+    class: clear
+    general: saris
+    location: velia
+    letter: Proceed to Karsa and defend the capital.
+    expect: {action: move, target: karsa}
+    accept: [retreat]
+
+  - id: c09
+    class: clear
+    general: velk
+    location: marren
+    letter: Press on to Sarnos and seize it.
+    expect: {action: move, target: sarnos}
+
+  - id: c10
+    class: clear
+    general: saris
+    location: duna
+    letter: Go down into Lyde Marsh and hold it against them.
+    expect: {action: move, target: lyde}
+
+  - id: c11
+    class: clear
+    general: velk
+    location: hollow
+    letter: You have done well. Now push east and take Marren.
+    expect: {action: move, target: marren}
+
+  - id: c12
+    class: clear
+    general: saris
+    location: velia
+    letter: Remain in Velia. Under no circumstances advance.
+    expect: {action: hold}
+
+  - id: c13
+    class: clear
+    general: velk
+    location: velia
+    letter: Ride for Kethra and put it to the torch.
+    expect: {action: move, target: kethra}
+
+  - id: c14
+    class: clear
+    general: saris
+    location: hollow
+    letter: Pull your men back to Duna before they are surrounded.
+    expect: {action: retreat, target: duna}
+    accept: [move]
+
+  - id: c15
+    class: clear
+    general: velk
+    location: duna
+    friendly: {saris: hollow}
+    letter: Join Lady Saris at Hollow Wood.
+    expect: {action: move, target: hollow}
+
+  - id: c16
+    class: clear
+    general: saris
+    location: duna
+    letter: Keep your position in the hills. The enemy will break against you there.
+    expect: {action: hold}
+
+  - id: c17
+    class: clear
+    general: velk
+    location: oros
+    letter: Cross the ford and march on Marren.
+    expect: {action: move, target: marren}
+
+  - id: c18
+    class: clear
+    general: saris
+    location: karsa
+    letter: Return to Duna Hills and hold the road there.
+    expect: {action: move, target: duna}
+
+  - id: c19
+    class: clear
+    general: velk
+    location: velia
+    letter: Do not attack. Hold Velia and wait for my word.
+    expect: {action: hold}
+
+  - id: c20
+    class: clear
+    general: saris
+    location: hollow
+    letter: Retreat. Now.
+    expect: {action: retreat}
+
+  - id: c21
+    class: clear
+    general: velk
+    location: marren
+    letter: Make for the Pass of Ilth and hold it.
+    expect: {action: move, target: ilth}
+
+  - id: c22
+    class: clear
+    general: saris
+    location: duna
+    standing: hold
+    letter: Your orders are unchanged. Hold Duna Hills.
+    expect: {action: hold}
+
+  - id: c23
+    class: clear
+    general: velk
+    location: velia
+    letter: Bring your army back to Karsa; the capital needs you.
+    expect: {action: move, target: karsa}
+    accept: [retreat]
+
+  # ------------------------------------------------------------ ambiguous --
+  - id: a01
+    class: ambiguous
+    general: saris
+    location: velia
+    note: The worked example from the spec.
+    letter: The enemy has been seen near the ford. Make sure they do not cross.
+    readings: [hold, move]
+    target: oros
+
+  - id: a02
+    class: ambiguous
+    general: velk
+    location: duna
+    letter: Deal with the enemy in Hollow Wood as you see fit.
+    readings: [hold, move]
+    target: hollow
+
+  - id: a03
+    class: ambiguous
+    general: saris
+    location: duna
+    letter: Marren must not fall to them.
+    readings: [move, hold]
+    target: marren
+
+  - id: a04
+    class: ambiguous
+    general: velk
+    location: velia
+    letter: Keep the enemy away from Velia.
+    readings: [hold, move]
+
+  - id: a05
+    class: ambiguous
+    general: saris
+    location: hollow
+    letter: If you can, push on to Marren; but do not risk the army.
+    readings: [move, hold]
+    target: marren
+
+  - id: a06
+    class: ambiguous
+    general: velk
+    location: hollow
+    letter: The enemy is strong in Marren. Use your judgement.
+    readings: [hold, move, retreat]
+
+  - id: a07
+    class: ambiguous
+    general: saris
+    location: duna
+    letter: Protect the road to Karsa.
+    readings: [hold, move]
+
+  - id: a08
+    class: ambiguous
+    general: saris
+    location: hollow
+    letter: Hold Hollow Wood if you can, but fall back if they come in force.
+    note: A conditional order; the PoC flattens it to one action.
+    readings: [hold, retreat]
+
+  - id: a09
+    class: ambiguous
+    general: velk
+    location: oros
+    letter: Watch the ford, and strike if they try to cross.
+    note: A conditional order; the PoC flattens it to one action.
+    readings: [hold, move]
+
+  - id: a10
+    class: ambiguous
+    general: saris
+    location: velia
+    friendly: {velk: hollow}
+    letter: Lend Velk a hand at Hollow Wood if he needs it.
+    readings: [move, hold]
+    target: hollow
+
+  - id: a11
+    class: ambiguous
+    general: velk
+    location: duna
+    letter: The pass at Ilth is the key to everything.
+    readings: [move, hold]
+    target: ilth
+
+  - id: a12
+    class: ambiguous
+    general: saris
+    location: hollow
+    letter: I hear Marren is lightly held. It would be a fine prize.
+    readings: [move, hold]
+    target: marren
+
+  # -------------------------------------------------------------- unclear --
+  - id: u01
+    class: unclear
+    general: velk
+    location: velia
+    letter: Do the thing we discussed.
+
+  - id: u02
+    class: unclear
+    general: saris
+    location: duna
+    letter: Go there and do what must be done.
+
+  - id: u03
+    class: unclear
+    general: velk
+    location: hollow
+    letter: March!
+
+  - id: u04
+    class: unclear
+    general: saris
+    location: velia
+    letter: Sarnoss, or was it Marrn? Whichever is weaker. Or neither.
+
+  # ----------------------------------------------------------------- none --
+  - id: n01
+    class: none
+    general: velk
+    location: velia
+    letter: Your victory at the hills is the talk of the court. The queen sends her regards.
+
+  - id: n02
+    class: none
+    general: saris
+    location: duna
+    letter: How many men do you have left? Write back soon.
+
+  - id: n03
+    class: none
+    general: velk
+    location: oros
+    letter: The harvest in Karsa has been good this year.
+
+  - id: n04
+    class: none
+    general: saris
+    location: hollow
+    letter: I trust you are well. The weather here has turned cold.

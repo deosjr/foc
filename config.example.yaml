@@ -3,22 +3,42 @@
 seed: 42
 mode: live            # live | record | replay
 replay_file: ""
-cache_file: ""        # e.g. .cache/responses.jsonl to cache real model calls during development
+cache_file: ""        # e.g. .cache/responses.jsonl: cache real model calls across runs while developing
 
 decision:
-  provider: mock      # mock | llm
-  timeout: 10s
+  provider: mock      # mock | llm   ("llm" asks the llm below for JSON probabilities)
+  temperature: 0      # only sent to models that accept it
+  max_tokens: 2000
+  timeout: 30s
 
 llm:
   provider: mock      # mock | anthropic | openaicompat
-  # To use Claude:  provider: anthropic, model: claude-sonnet-5, api_key_env: ANTHROPIC_API_KEY
-  # To use Ollama:  provider: openaicompat, model: llama3.1, endpoint: http://localhost:11434/v1
   model: ""
   endpoint: ""
   api_key_env: ""
-  temperature: 0.8
+  temperature: 0.8    # only sent to models that accept it (not Sonnet 5 / Opus 4.7+)
   max_tokens: 400
   timeout: 30s
+
+# To use Claude for both (export ANTHROPIC_API_KEY first):
+#
+# decision: {provider: llm, max_tokens: 2000, timeout: 30s}
+# llm:
+#   provider: anthropic
+#   model: claude-sonnet-5       # or claude-opus-5, claude-haiku-4-5, ...
+#   api_key_env: ANTHROPIC_API_KEY
+#   effort: low                  # current models think by default; low keeps turns fast
+#   max_tokens: 2000             # leave room for thinking as well as the letter
+#   timeout: 60s
+#
+# To use a local model through Ollama (or any OpenAI-style endpoint):
+#
+# llm:
+#   provider: openaicompat
+#   model: llama3.1
+#   endpoint: http://localhost:11434/v1
+#   api_key_env: ""              # set to e.g. OPENAI_API_KEY for hosted endpoints
+#   structured_output: true      # ask for JSON-schema output where supported
 
 interpretation:
   clear_threshold: 0.8

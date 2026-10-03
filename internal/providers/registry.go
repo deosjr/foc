@@ -23,6 +23,13 @@ type ProviderConfig struct {
 	Temperature float64       `yaml:"temperature"`
 	MaxTokens   int           `yaml:"max_tokens"`
 	Timeout     time.Duration `yaml:"timeout"`
+	// Effort is sent as output_config.effort to Anthropic models that
+	// support it (low | medium | high | xhigh | max); empty means default.
+	Effort string `yaml:"effort"`
+	// StructuredOutput asks OpenAI-compatible endpoints for JSON-schema
+	// constrained output when a request carries a schema. Anthropic always
+	// uses the schema when one is given.
+	StructuredOutput bool `yaml:"structured_output"`
 }
 
 // APIKey reads the key from the configured environment variable. Keys are
