@@ -44,7 +44,13 @@ type Order struct {
 	Type          OrderType `json:"type"`
 	Target        string    `json:"target,omitempty"` // province id, if any
 	SupportArmyID string    `json:"support,omitempty"`
+	// Stance is the army's attitude to battle. StanceRefuse: it keeps to a
+	// fortified camp and will not offer battle; "" accepts battle.
+	Stance string `json:"stance,omitempty"`
 }
+
+// StanceRefuse marks an army that avoids battle.
+const StanceRefuse = "refuse"
 
 func (o Order) String() string {
 	if o.Target != "" {

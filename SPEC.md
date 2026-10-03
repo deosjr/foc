@@ -133,6 +133,7 @@ The toy ships one small map, three player generals, two enemy armies and a fully
 4. The highest power takes the province. A tie means a stand-off: nobody enters and the defender stays.
 5. Two armies moving into each other's provinces fight a field battle on the road between, with the same rule and their supports. That is their only battle this turn: the loser falls back home, and the winner holds its own province without advancing.
 6. Casualties per battle: loser loses 30% of its strength, winner loses 10% of its own. Round half up.
+6a. *Refusing battle.* Each general has a battle stance set by his last letter: he avoids battle when engagement + 0.3 × (Aggression − Caution) is below `refuse_battle_below` (0.35). An army avoiding battle never marches into an occupied province, and when it stands on strong ground (any terrain multiplier above 1, so not plains) it keeps to a fortified camp: its defence gains `camp_bonus` (+0.5), and an attack that cannot beat that is called off with no battle and no losses. Armies that meet on the road or in an empty province fight regardless: an encounter leaves no choice. The enemy refuses battle when it digs in, outnumbered, on its own supply centre.
 7. A dislodged defender retreats to the adjacent province with no enemy army that is closest to its own capital (ties broken by province id), never into a province its attackers came from, or disbands if none exists.
 8. A province's owner changes when an army ends the turn in it unopposed.
 

@@ -116,6 +116,14 @@ func DescribeOrder(o model.Order, m *mapdata.Map, armyNames ...map[string]string
 	return "hold position"
 }
 
+// DescribeStance appends the battle stance to an order's description.
+func DescribeStance(o model.Order, desc string) string {
+	if o.Stance == model.StanceRefuse {
+		return desc + ", avoiding battle"
+	}
+	return desc
+}
+
 // QuestionSpec is one entry of questions.yaml.
 type QuestionSpec struct {
 	ID          string        `yaml:"id"`

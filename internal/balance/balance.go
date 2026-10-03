@@ -93,7 +93,7 @@ var Bots = []Bot{
 	{"turtle", func(e *engine.Engine, s *engine.GameState) []model.Order {
 		var out []model.Order
 		for _, a := range playerArmies(s) {
-			out = append(out, model.Order{ArmyID: a.ID, Type: model.Entrench})
+			out = append(out, model.Order{ArmyID: a.ID, Type: model.Entrench, Stance: model.StanceRefuse})
 		}
 		return out
 	}},
@@ -153,6 +153,11 @@ func steady(e *engine.Engine, s *engine.GameState) []model.Order {
 			mult := e.Map.Defence(into)
 			if a.Entrenched >= 1 {
 				mult += e.Rules.EntrenchBonus
+				// Dug in on its own supply centre, it will likely refuse
+				// battle: only an attack that can storm the camp is worth it.
+				if prov := s.Provinces[into]; prov.Supply && prov.Owner == model.Enemy && e.Map.Defence(into) > 1 {
+					mult += e.Rules.CampBonus
+				}
 			}
 			defence += float64(a.Strength) * mult
 		}
@@ -177,11 +182,11 @@ func steady(e *engine.Engine, s *engine.GameState) []model.Order {
 		}
 		return out
 	}
-	// Not strong enough: gather next to the lead and dig in.
-	out = append(out, model.Order{ArmyID: lead.ID, Type: model.Entrench})
+	// Not strong enough: gather next to the lead, dig in and refuse battle.
+	out = append(out, model.Order{ArmyID: lead.ID, Type: model.Entrench, Stance: model.StanceRefuse})
 	for _, a := range field[1:] {
 		if a.Location == lead.Location || e.Map.Adjacent(a.Location, into) {
-			out = append(out, model.Order{ArmyID: a.ID, Type: model.Entrench})
+			out = append(out, model.Order{ArmyID: a.ID, Type: model.Entrench, Stance: model.StanceRefuse})
 		} else {
 			out = append(out, model.Order{ArmyID: a.ID, Type: model.MoveToward, Target: lead.Location})
 		}

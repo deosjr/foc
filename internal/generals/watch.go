@@ -27,7 +27,7 @@ func Fires(tr model.Trigger, obs *engine.Observation) bool {
 			}
 		}
 	case model.Attacked:
-		if obs.RetreatedTo != "" {
+		if obs.RetreatedTo != "" || obs.KeptCamp {
 			return true
 		}
 		for _, b := range obs.Battles {

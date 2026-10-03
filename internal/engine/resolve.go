@@ -42,7 +42,7 @@ type Move struct {
 type Bounce struct {
 	Army   string `json:"army"`
 	Target string `json:"target"`
-	Reason string `json:"reason"` // "lost" | "standoff" | "field" (won a field battle) | "retreat-blocked"
+	Reason string `json:"reason"` // "lost" | "standoff" | "field" (won a field battle) | "retreat-blocked" | "camp" (the defender kept to its camp) | "declined" (would not offer battle)
 }
 
 // SupportResult is what became of one Support order.
@@ -87,6 +87,27 @@ type Result struct {
 	Captures  []Capture           `json:"captures"`
 	Supports  []SupportResult     `json:"supports"`
 	Musters   []Muster            `json:"musters,omitempty"`
+	Declined  []Declined          `json:"declined,omitempty"`
+}
+
+// Declined is a battle that did not happen: the defenders kept to their
+// camp and the attack was too weak to storm it.
+type Declined struct {
+	Province  string   `json:"province"`
+	Attackers []string `json:"attackers"`
+	Defenders []string `json:"defenders"`
+}
+
+// KeptCamp reports whether an army refused battle in its camp this turn.
+func (r *Result) KeptCamp(armyID string) bool {
+	for _, d := range r.Declined {
+		for _, id := range d.Defenders {
+			if id == armyID {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Muster is the strength a side raised in winter and where it went.
@@ -163,6 +184,7 @@ type resolver struct {
 	dest     map[string]string
 	intended map[string]string    // destination before any bounce
 	dugIn    map[string]bool      // entrenched for a second turn or more
+	camp     map[string]bool      // refusing battle in its camp this turn
 	support  map[string][]support // supported army -> supports given to it
 }
 
@@ -205,7 +227,7 @@ func (e *Engine) Resolve(s *GameState, orders []model.Order) (*Result, error) {
 	}
 
 	r := &resolver{e: e, s: s, ids: s.ArmyIDs(), loc: map[string]string{}, dest: map[string]string{},
-		intended: map[string]string{}, dugIn: map[string]bool{}, support: map[string][]support{}}
+		intended: map[string]string{}, dugIn: map[string]bool{}, camp: map[string]bool{}, support: map[string][]support{}}
 	ids, loc, dest := r.ids, r.loc, r.dest
 
 	// 1–2. Intentions and entrenchment.
@@ -229,6 +251,14 @@ func (e *Engine) Resolve(s *GameState, orders []model.Order) (*Result, error) {
 			} else {
 				dest[id] = o.Target
 			}
+		}
+		if o.Stance == model.StanceRefuse && dest[id] != a.Location && e.occupiedBy(s, dest[id], a.Side.Opponent()) {
+			// An army avoiding battle will not march into the enemy.
+			res.Bounces = append(res.Bounces, Bounce{Army: id, Target: dest[id], Reason: "declined"})
+			dest[id] = a.Location
+		}
+		if o.Stance == model.StanceRefuse && dest[id] == a.Location {
+			r.camp[id] = true
 		}
 		if o.Type == model.Entrench {
 			a.Entrenched++
@@ -342,6 +372,9 @@ func (e *Engine) Resolve(s *GameState, orders []model.Order) (*Result, error) {
 						if w == "" {
 							reason = "standoff"
 						}
+						if r.campHolds(p, w) {
+							reason = "camp" // they would not come out; we did not storm
+						}
 						res.Bounces = append(res.Bounces, Bounce{Army: id, Target: p, Reason: reason})
 						bounced[p] = append(bounced[p], id)
 						dest[id] = loc[id]
@@ -364,6 +397,23 @@ func (e *Engine) Resolve(s *GameState, orders []model.Order) (*Result, error) {
 			continue
 		}
 		b := Battle{Province: p, Armies: members, Power: power, Winner: winner(power)}
+		if r.campHolds(p, b.Winner) {
+			// No battle: the camp was too strong to storm.
+			d := Declined{Province: p}
+			for side, ids := range members {
+				for _, id := range ids {
+					if r.camp[id] && loc[id] == p {
+						d.Defenders = append(d.Defenders, id)
+					} else if s.Armies[id].Side == side && loc[id] != p {
+						d.Attackers = append(d.Attackers, id)
+					}
+				}
+			}
+			sort.Strings(d.Attackers)
+			sort.Strings(d.Defenders)
+			res.Declined = append(res.Declined, d)
+			continue
+		}
 		if b.Winner != "" {
 			for _, id := range members[b.Winner.Opponent()] {
 				if loc[id] == p && dest[id] == p {
@@ -512,6 +562,23 @@ func (e *Engine) occupiedBy(s *GameState, province string, side model.Side) bool
 	return false
 }
 
+// campHolds reports whether a province holds a camp refusing battle whose
+// side was not beaten (w is the contest's winner, "" for a tie). Camps need
+// strong ground (a terrain multiplier above 1).
+func (r *resolver) campHolds(p string, w model.Side) bool {
+	if r.e.Map.Defence(p) <= 1 {
+		return false
+	}
+	for id, inCamp := range r.camp {
+		if inCamp && r.loc[id] == p && r.dest[id] == p {
+			if a := r.s.Armies[id]; a != nil && (w == "" || w == a.Side) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // supportFor sums the support given to an army fighting in a province.
 func (r *resolver) supportFor(id, province string) float64 {
 	total := 0.0
@@ -539,6 +606,11 @@ func (r *resolver) contest(p string, extra []string) (map[model.Side]float64, ma
 			mult := r.e.Map.Defence(p)
 			if r.dugIn[id] {
 				mult += r.e.Rules.EntrenchBonus
+			}
+			if r.camp[id] && r.e.Map.Defence(p) > 1 {
+				// A camp needs strong ground: on an open plain there is no
+				// refusing battle, only digging in.
+				mult += r.e.Rules.CampBonus
 			}
 			str *= mult
 		}

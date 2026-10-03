@@ -59,11 +59,12 @@ type AI interface {
 //     threatened, the nearest army goes back. (Winter musters raise a new
 //     army in an empty capital.)
 //   - Every other army, in id order:
-//     1. falls back toward the capital if the player armies next to it
-//     could beat it where it stands;
-//     2. attacks a neighbouring player army it can beat, counting half the
+//     1. attacks a neighbouring player army it can beat, counting half the
 //     strength of free fellow armies that are next to the fight (they
 //     then support it);
+//     2. if the player armies next to it could beat it where it stands,
+//     digs in on its own supply centre and refuses battle, or falls back to
+//     the nearest supply centre of ours;
 //     3. takes an empty supply centre next to it, or guards one of its own
 //     that a player army is next to;
 //     4. otherwise marches on the nearest supply centre it does not hold,
@@ -199,7 +200,7 @@ func (h *Heuristic) Orders(s *engine.GameState) []model.Order {
 			// odds are hopeless even dug in.
 			if s.Provinces[here].Supply && s.Provinces[here].Owner == model.Enemy &&
 				threat <= float64(a.Strength)*(m.Defence(here)+h.bonus())*1.5 {
-				orders[id] = model.Order{ArmyID: id, Type: model.Entrench}
+				orders[id] = model.Order{ArmyID: id, Type: model.Entrench, Stance: model.StanceRefuse}
 				continue
 			}
 			// Otherwise fall back to the nearest supply centre of ours that

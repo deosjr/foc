@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/deosjr/foc/internal/config"
+	"github.com/deosjr/foc/internal/model"
 	dmock "github.com/deosjr/foc/internal/providers/decision/mock"
 	lmock "github.com/deosjr/foc/internal/providers/llm/mock"
 	"github.com/deosjr/foc/internal/runlog"
@@ -317,5 +318,27 @@ func TestWatchOutOfSightIsMentioned(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("concerns %q should say Sarnos is out of sight", d.Facts.Concerns)
+	}
+}
+
+func TestLettersSetBattlePosture(t *testing.T) {
+	g, _ := newTestGame(t)
+	// Saris is cautious: with no letter she avoids battle; Velk is bold.
+	if g.posture["saris"] != model.StanceRefuse || g.posture["velk"] != "" {
+		t.Fatalf("starting postures: %v", g.posture)
+	}
+	g.SetDraft("saris", "Attack them, crush them, strike at once and seize the wood!")
+	g.SetDraft("velk", "Hold Velia carefully; avoid battle and preserve your men, no risk.")
+	if err := g.EndTurn(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if g.posture["saris"] != "" {
+		t.Error("a letter urging battle should make even Saris accept it")
+	}
+	if g.posture["velk"] != model.StanceRefuse {
+		t.Error("a letter forbidding battle should make even Velk avoid it")
+	}
+	if d := g.DebugTurn("velk", 1); d.Order.Stance != model.StanceRefuse || !strings.Contains(d.Facts.OrderUnderstood, "avoiding battle") {
+		t.Errorf("velk's order %v, understood %q", d.Order, d.Facts.OrderUnderstood)
 	}
 }

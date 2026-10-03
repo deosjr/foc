@@ -228,7 +228,10 @@ type Ruleset struct {
 	// entrenched for a second turn or more.
 	SupportFraction float64 `yaml:"support_fraction"`
 	EntrenchBonus   float64 `yaml:"entrench_bonus"`
-	Casualties      struct {
+	// CampBonus is added to the defence multiplier of an army that refuses
+	// battle in its camp; an attack that cannot beat it is called off.
+	CampBonus  float64 `yaml:"camp_bonus"`
+	Casualties struct {
 		Loser    float64 `yaml:"loser"`
 		Winner   float64 `yaml:"winner"`
 		Standoff float64 `yaml:"standoff"`

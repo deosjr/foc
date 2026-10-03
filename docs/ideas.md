@@ -213,6 +213,10 @@ concrete form.
 
 ### Offering and refusing battle
 
+*(Implemented: postures from the letter's engagement and the general's
+temperament, camps on strong ground, called-off attacks, encounter battles.
+See the resolution rules in SPEC.md.)*
+
 **Source.** Part I describes armies camped a few miles apart for days, each
 drawing up on favourable ground and declining to fight on bad ground: the
 armies at Mantinea (418 BC) formed and re-formed over several days

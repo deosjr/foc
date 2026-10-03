@@ -28,6 +28,7 @@ interpretation:
   clear_threshold: 0.8
   unclear_threshold: 0.4
   plausibility_threshold: 0.35
+  refuse_battle_below: 0.35   # engagement + 0.3*(aggression - caution) below this: avoid battle
   rationale: true      # one extra LLM call per letter read; shown only in the review
 
 report:

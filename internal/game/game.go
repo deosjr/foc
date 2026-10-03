@@ -105,6 +105,7 @@ type Game struct {
 	seen           map[string]map[string]int      // general id -> province -> enemy strength he last saw
 	watches        map[string]*model.Contingency  // general id -> the "if X, then Y" he is watching for
 	lastObs        map[string]*engine.Observation // general id -> what he saw at the end of the last turn
+	posture        map[string]string              // general id -> battle stance from his last letter
 }
 
 // Snapshot is belief and truth as they stood at the end of a turn.
@@ -193,6 +194,7 @@ func New(o Options) (*Game, error) {
 		seen:           map[string]map[string]int{},
 		watches:        map[string]*model.Contingency{},
 		lastObs:        map[string]*engine.Observation{},
+		posture:        map[string]string{},
 	}
 	var names []string
 	for _, a := range scn.Armies {
@@ -208,6 +210,7 @@ func New(o Options) (*Game, error) {
 		g.generals[cp.ID] = &cp
 		g.generalOrder = append(g.generalOrder, cp.ID)
 		g.standingSource[cp.ID] = "no orders received yet"
+		g.posture[cp.ID] = generals.Stance(0.5, cp.Traits, cfg.Interpretation.Thresholds)
 		// Generals start out knowing the court's intelligence.
 		g.seen[cp.ID] = map[string]int{}
 		for _, in := range scn.Intel {
@@ -380,6 +383,12 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 			effective[l.To], refused[l.To], clarify[l.To] = nil, nil, nil
 		}
 		if in.Outcome == generals.OutcomeOrder || in.Outcome == generals.OutcomeRefuse {
+			// A new order sets his attitude to battle from the letter's tone.
+			before := g.posture[l.To]
+			g.posture[l.To] = generals.Stance(in.Parsed.Engagement, gen.Traits, g.cfg.Interpretation.Thresholds)
+			if g.posture[l.To] != before {
+				g.log.Add("posture", map[string]any{"general": l.To, "stance": g.posture[l.To], "engagement": in.Parsed.Engagement})
+			}
 			// A new order replaces any earlier watch, with its own or none.
 			if in.Watch != nil {
 				g.watches[l.To] = in.Watch
@@ -458,6 +467,9 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 			g.log.Add("watch-fired", map[string]any{"general": gid, "watch": w, "order": o})
 			delete(g.watches, gid)
 		}
+		o := orders[gid]
+		o.Stance = g.posture[gid]
+		orders[gid] = o
 		all = append(all, orders[gid])
 		g.log.Add("order", map[string]any{"general": gid, "order": orders[gid], "source": sources[gid]})
 	}

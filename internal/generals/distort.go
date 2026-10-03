@@ -54,7 +54,7 @@ func Distort(obs engine.Observation, g *model.General, rc ReportContext) (report
 		General:          g.Name,
 		WrittenTurn:      obs.Turn,
 		Location:         name(obs.Location),
-		OrderUnderstood:  interpret.DescribeOrder(obs.Order, rc.Map),
+		OrderUnderstood:  interpret.DescribeStance(obs.Order, interpret.DescribeOrder(obs.Order, rc.Map, rc.ArmyNames)),
 		OrderSource:      rc.OrderSource,
 		OwnStrength:      obs.Strength,
 		OwnLosses:        roundHalfUp(float64(obs.Losses) * (1 - d.VanityOwn*tr.Vanity)),
@@ -66,7 +66,7 @@ func Distort(obs engine.Observation, g *model.General, rc ReportContext) (report
 	}
 	if obs.Order.Type == model.Retreat {
 		// The retreat order names the step actually taken.
-		f.OrderUnderstood = "fall back to " + name(obs.Order.Target)
+		f.OrderUnderstood = interpret.DescribeStance(obs.Order, "fall back to "+name(obs.Order.Target))
 	}
 	if obs.Start != obs.Location {
 		f.MovedFrom = name(obs.Start)
@@ -180,6 +180,10 @@ func outcome(obs engine.Observation, rc ReportContext) string {
 		return fmt.Sprintf("driven out of %s, fell back to %s", name(obs.Start), name(obs.RetreatedTo))
 	case obs.Blocked != nil:
 		switch {
+		case obs.Blocked.Reason == "camp":
+			return fmt.Sprintf("the enemy in %s kept to a strong camp and would not give battle; we did not storm it, and are still in %s", name(obs.Blocked.Target), name(obs.Location))
+		case obs.Blocked.Reason == "declined":
+			return fmt.Sprintf("would not offer battle at %s, where the enemy stands; stayed in %s", name(obs.Blocked.Target), name(obs.Location))
 		case obs.Blocked.Reason == "retreat-blocked":
 			return fmt.Sprintf("could not fall back to %s: the enemy holds it", name(obs.Blocked.Target))
 		case obs.Blocked.Reason == "field":
@@ -197,6 +201,8 @@ func outcome(obs engine.Observation, rc ReportContext) string {
 		return fmt.Sprintf("marched from %s and reached %s", name(obs.Start), name(obs.Location))
 	case obs.Start != obs.Location:
 		return fmt.Sprintf("marched from %s to %s, on the way to %s", name(obs.Start), name(obs.Location), name(obs.Order.Target))
+	case obs.KeptCamp:
+		return fmt.Sprintf("the enemy came before our camp at %s, but we would not give battle and they did not storm it", name(obs.Location))
 	case obs.Order.Type == model.Entrench && obs.Entrenched >= 2:
 		return "held " + name(obs.Location) + ", dug in"
 	case obs.Order.Type == model.Entrench:

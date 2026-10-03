@@ -4,6 +4,7 @@ men_per_strength: 100      # strength 30 = 3,000 men
 disband_below: 5
 support_fraction: 0.5      # a supporter adds this share of its strength
 entrench_bonus: 0.25       # added to the terrain multiplier from the second turn of entrenching
+camp_bonus: 0.5            # added for an army refusing battle in a camp on strong ground (not plains); weaker attacks are called off
 casualties:
   loser: 0.30
   winner: 0.10

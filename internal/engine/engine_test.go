@@ -472,3 +472,69 @@ func supp(id, whom string) model.Order {
 	return model.Order{ArmyID: id, Type: model.Support, SupportArmyID: whom}
 }
 func entrench(id string) model.Order { return model.Order{ArmyID: id, Type: model.Entrench} }
+
+func refuse(o model.Order) model.Order { o.Stance = model.StanceRefuse; return o }
+
+func TestRefusingBattle(t *testing.T) {
+	e := testEngine(t)
+	hold := func(id string) model.Order { return model.Order{ArmyID: id, Type: model.Hold} }
+
+	t.Run("an attack too weak to storm the camp is called off", func(t *testing.T) {
+		// 24 in camp in the Duna Hills: 24 * (1.25 + 0.5) = 42 against 40.
+		s := state(e, p("a", "duna", 24), en("e", "hollow", 40))
+		res, err := e.Resolve(s, []model.Order{refuse(hold("a")), move("e", "duna")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Battles) != 0 || len(res.Declined) != 1 {
+			t.Fatalf("battles %v, declined %v", res.Battles, res.Declined)
+		}
+		if s.Armies["a"].Strength != 24 || s.Armies["e"].Strength != 40 || s.Armies["e"].Location != "hollow" {
+			t.Errorf("nobody should lose anyone: a=%+v e=%+v", s.Armies["a"], s.Armies["e"])
+		}
+		if b, _ := res.BounceOf("e"); b.Reason != "camp" {
+			t.Errorf("attacker bounce reason = %q", b.Reason)
+		}
+		if !res.KeptCamp("a") {
+			t.Error("defender should be recorded as keeping to its camp")
+		}
+	})
+	t.Run("control: without the camp the same attack wins", func(t *testing.T) {
+		s := state(e, p("a", "duna", 24), en("e", "hollow", 40))
+		e.Resolve(s, []model.Order{hold("a"), move("e", "duna")})
+		if s.Armies["e"].Location != "duna" {
+			t.Error("an army accepting battle should have been dislodged")
+		}
+	})
+	t.Run("a strong enough attack storms the camp", func(t *testing.T) {
+		s := state(e, p("a", "duna", 24), en("e", "hollow", 45))
+		res, _ := e.Resolve(s, []model.Order{refuse(hold("a")), move("e", "duna")})
+		if len(res.Battles) != 1 || s.Armies["e"].Location != "duna" {
+			t.Errorf("45 > 42 should storm the camp: battles %v", res.Battles)
+		}
+	})
+	t.Run("there is no refusing battle on an open plain", func(t *testing.T) {
+		s := state(e, p("a", "velia", 24), en("e", "hollow", 30))
+		res, _ := e.Resolve(s, []model.Order{refuse(hold("a")), move("e", "velia")})
+		if len(res.Declined) != 0 || s.Armies["e"].Location != "velia" {
+			t.Errorf("a camp on Velia's plain should not hold: declined %v", res.Declined)
+		}
+	})
+	t.Run("an army avoiding battle will not attack", func(t *testing.T) {
+		s := state(e, p("a", "velia", 30), en("e", "hollow", 10))
+		res, _ := e.Resolve(s, []model.Order{refuse(move("a", "hollow"))})
+		if len(res.Battles) != 0 || s.Armies["a"].Location != "velia" {
+			t.Errorf("battles %v, a at %s", res.Battles, s.Armies["a"].Location)
+		}
+		if b, _ := res.BounceOf("a"); b.Reason != "declined" {
+			t.Errorf("bounce reason = %q", b.Reason)
+		}
+	})
+	t.Run("blundering into each other is an encounter: no choice", func(t *testing.T) {
+		s := state(e, p("a", "velia", 30), en("e", "marren", 20))
+		res, _ := e.Resolve(s, []model.Order{refuse(move("a", "hollow")), move("e", "hollow")})
+		if len(res.Battles) != 1 || s.Armies["a"].Location != "hollow" {
+			t.Errorf("an encounter in an empty province should still be fought: %v", res.Battles)
+		}
+	})
+}

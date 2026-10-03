@@ -17,6 +17,19 @@ type Thresholds struct {
 	Clear        float64 `yaml:"clear_threshold"`
 	Unclear      float64 `yaml:"unclear_threshold"`
 	Plausibility float64 `yaml:"plausibility_threshold"`
+	// RefuseBattleBelow: a general avoids battle when his willingness,
+	// engagement + 0.3 × (Aggression − Caution), falls below it.
+	RefuseBattleBelow float64 `yaml:"refuse_battle_below"`
+}
+
+// Stance is a general's attitude to battle given the engagement score of his
+// last letter (0.5 if he has had none): a cautious general may avoid battle
+// unless urged to fight; a bold one fights unless told plainly not to.
+func Stance(engagement float64, t model.Traits, th Thresholds) string {
+	if engagement+0.3*(t.Aggression-t.Caution) < th.RefuseBattleBelow {
+		return model.StanceRefuse
+	}
+	return ""
 }
 
 // Outcomes of interpretation.

@@ -53,6 +53,7 @@ type Observation struct {
 	Support     *SupportResult   `json:"support,omitempty"`
 	Entrenched  int              `json:"entrenched"`           // consecutive turns dug in
 	Reinforced  int              `json:"reinforced,omitempty"` // winter levies that joined
+	KeptCamp    bool             `json:"kept_camp,omitempty"`  // the enemy came, and we would not give battle
 }
 
 func roundTo(x float64, step int) int {
@@ -79,6 +80,7 @@ func (e *Engine) Perceive(s *GameState, res *Result, generalID, armyID string, r
 	if d, ok := res.DislodgeOf(armyID); ok {
 		obs.RetreatedTo = d.To
 	}
+	obs.KeptCamp = res.KeptCamp(armyID)
 	if sr, ok := res.SupportOf(armyID); ok {
 		obs.Support = &sr
 	}
