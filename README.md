@@ -27,6 +27,18 @@ ever read from the environment variable named in the config.
 - Decision providers: `mock` (keyword rules), `llm` (asks the configured LLM for JSON probabilities).
 - LLM providers: `mock` (template letters), `anthropic`, `openaicompat` (OpenAI, OpenRouter, Ollama, llama.cpp, vLLM).
 
+To run on a free local model instead (no key, nothing leaves the machine):
+
+```bash
+brew install ollama
+OLLAMA_CONTEXT_LENGTH=8192 ollama serve   # leave running; the default context is too small
+ollama pull llama3.1:8b
+cp config.ollama.example.yaml config.yaml
+```
+
+An 8B model is good enough to exercise the whole pipeline, but expect 15–45
+seconds a turn and weaker readings than Claude.
+
 Set `cache_file` to cache real model responses across runs while developing,
 and `mode: record` to write every response to the run directory so a game can
 be replayed with `--replay runs/<dir>`.

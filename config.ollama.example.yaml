@@ -1,0 +1,41 @@
+# Local open model through Ollama, for both the decision model and the
+# letters. No API key, nothing leaves the machine. Start the server with a
+# context window big enough for the decision prompt:
+#
+#   OLLAMA_CONTEXT_LENGTH=8192 ollama serve
+#   ollama pull llama3.1:8b
+seed: 42
+mode: live
+cache_file: .cache/responses.jsonl   # reuse model answers across runs while developing
+
+decision:
+  provider: llm       # reads letters by asking the llm below for JSON probabilities
+  temperature: 0
+  max_tokens: 1500
+  timeout: 120s
+
+llm:
+  provider: openaicompat
+  model: llama3.1:8b
+  endpoint: http://127.0.0.1:11434/v1
+  api_key_env: ""
+  structured_output: true
+  temperature: 0.8
+  max_tokens: 600
+  timeout: 120s       # the first call also loads the model into memory
+
+interpretation:
+  clear_threshold: 0.8
+  unclear_threshold: 0.4
+  plausibility_threshold: 0.35
+
+report:
+  min_words: 30
+  max_words: 260
+
+ruleset: rulesets/ancient.yaml
+map: maps/valley.json
+generals: content/generals.yaml
+scenario: scenarios/poc.yaml
+prompts: prompts
+runs_dir: runs

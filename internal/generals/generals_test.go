@@ -141,6 +141,12 @@ func TestInterpretSteps(t *testing.T) {
 			order: model.Order{ArmyID: "a", Type: model.Retreat, Target: "hollow"},
 		},
 		{
+			name:   "retreat toward a place that is not homeward falls back toward the capital",
+			a:      base(map[string]float64{"retreat": 0.9, "hold": 0.1}, map[string]float64{"hollow": 1}),
+			traits: saris, loc: "duna", outcome: OutcomeOrder, step: "clear",
+			order: model.Order{ArmyID: "a", Type: model.Retreat, Target: "karsa"},
+		},
+		{
 			name:   "move to own province is a hold",
 			a:      base(map[string]float64{"move": 0.9, "hold": 0.1}, map[string]float64{"velia": 1}),
 			traits: saris, loc: "velia", outcome: OutcomeOrder, step: "clear",

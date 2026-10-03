@@ -59,6 +59,7 @@ func (w *Writer) Request(g *model.General, f ReportFacts) (llm.Request, error) {
 		"General":   g,
 		"Capital":   w.Capital,
 		"FactsJSON": string(factsJSON),
+		"MenNotes":  menNotes(f, w.Validator.MenPerStrength),
 		"MinWords":  w.Validator.MinWords,
 		"MaxWords":  w.Validator.MaxWords,
 	}
@@ -129,4 +130,21 @@ func FactsFromPrompt(content string) (ReportFacts, bool) {
 		return ReportFacts{}, false
 	}
 	return f, true
+}
+
+// menNotes spells out every count in FACTS as a number of men, so the model
+// does not have to do the conversion itself.
+func menNotes(f ReportFacts, per int) []string {
+	if per <= 1 {
+		return nil
+	}
+	say := func(what string, n int) string { return fmt.Sprintf("%s %d = %s", what, n, men(n)) }
+	notes := []string{say("own_strength", f.OwnStrength), say("own_losses", f.OwnLosses)}
+	for _, b := range f.Battles {
+		notes = append(notes, say("enemy_losses at "+b.Place, b.EnemyLosses))
+	}
+	for _, s := range f.Sightings {
+		notes = append(notes, say("enemy_strength in "+s.Province, s.EnemyStrength))
+	}
+	return notes
 }

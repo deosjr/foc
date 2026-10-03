@@ -22,5 +22,6 @@ FACTS:
 ```json
 {{.FactsJSON}}
 ```
+In men: {{range $i, $n := .MenNotes}}{{if $i}}; {{end}}{{$n}}{{end}}.
 Write your letter.
 {{end}}

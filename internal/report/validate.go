@@ -21,6 +21,10 @@ type Validator struct {
 
 var digitsRe = regexp.MustCompile(`\d{1,3}(?:,\d{3})+|\d+`)
 
+// menRe finds a bare number followed (within two words) by a word for
+// soldiers, unless one of those words is "hundred" or "thousand".
+var menRe = regexp.MustCompile(`\b(\d+)\s+(?:(?:[A-Za-z]+\s+){0,2}?)(men|soldiers|troops|warriors|spears|of their number|of ours)\b`)
+
 // Validate returns a list of violations; empty means the letter is fine.
 //   - Every number in the text must match a number in the facts, or that
 //     number times men-per-strength ("2,600 men" for strength 26). Number
@@ -39,6 +43,18 @@ func (v Validator) Validate(text string, f ReportFacts) []string {
 	for _, n := range NumbersIn(text) {
 		if n > 10 && !allowed[n] {
 			out = append(out, fmt.Sprintf("the number %d does not appear in FACTS", n))
+		}
+	}
+	// "27 men" for a strength of 27 is a slip of scale: it means 2,700.
+	if v.MenPerStrength > 1 {
+		for _, m := range menRe.FindAllStringSubmatch(text, -1) {
+			if strings.Contains(m[0], "hundred") || strings.Contains(m[0], "thousand") {
+				continue
+			}
+			n, _ := strconv.Atoi(strings.ReplaceAll(m[1], ",", ""))
+			if n > 0 && n < v.MenPerStrength && allowed[n] {
+				out = append(out, fmt.Sprintf("%q: counts in FACTS are in hundreds, so %d means %d men", m[0], n, n*v.MenPerStrength))
+			}
 		}
 	}
 	factText := f.Text()

@@ -122,9 +122,13 @@ func Interpret(a interpret.Answers, t model.Traits, sit Situation, th Thresholds
 		}
 	case ActRetreat:
 		target := topTarget(a, sit.Map)
-		if target == interpret.None || target == interpret.Unclear {
-			// "Fall back!" names no place: fall back toward home.
-			target = sit.Map.Capital(sit.Side)
+		capital := sit.Map.Capital(sit.Side)
+		if target == interpret.None || target == interpret.Unclear ||
+			sit.Map.Distance(target, capital) >= sit.Map.Distance(sit.Location, capital) {
+			// "Fall back!" names no place, or names one that is not
+			// homeward (usually the place the letter mentions as the
+			// danger): fall back toward home.
+			target = capital
 		}
 		d.Target = target
 		if target != sit.Location {

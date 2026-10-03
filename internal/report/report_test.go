@@ -112,3 +112,19 @@ func TestBelief(t *testing.T) {
 		t.Errorf("stale report overwrote marren: %d", *b.Provinces["marren"].EnemyStrength)
 	}
 }
+
+func TestValidateScaleSlips(t *testing.T) {
+	v := validator(t)
+	for text, bad := range map[string]bool{
+		"I hold Oros with 26 men.":            true,
+		"we lost 2 of ours at the ford.":      true,
+		"I hold Oros with 26 hundred men.":    false,
+		"I hold Oros with 2,600 good men.":    false,
+		"I sent 3 riders and 26 hundred men.": false,
+	} {
+		got := v.Validate(specLetter+" "+text, specFacts)
+		if (len(got) > 0) != bad {
+			t.Errorf("%q: violations %v, want bad=%v", text, got, bad)
+		}
+	}
+}
