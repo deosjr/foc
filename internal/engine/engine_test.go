@@ -120,12 +120,21 @@ func TestResolve(t *testing.T) {
 			battles:   1,
 		},
 		{
-			name:   "head-to-head: border battle, then the winner attacks the loser at home",
+			name:   "head-to-head: one field battle on the road; nobody advances",
 			armies: []*Army{p("a", "velia", 30), en("e", "hollow", 20)},
 			orders: []model.Order{move("a", "hollow"), move("e", "velia")},
-			// Border: 30 v 20, a -> 27, e -> 14. Hollow: 27 v 14*1.2, a -> 24, e -> 10, retreats.
-			want:    map[string]want{"a": {"hollow", 24}, "e": {"marren", 10}},
-			battles: 2,
+			// Field: 30 v 20, a -> 27 (winner, holds the road), e -> 14 (falls back).
+			want:    map[string]want{"a": {"velia", 27}, "e": {"hollow", 14}},
+			battles: 1,
+		},
+		{
+			name:   "marching out of the capital to meet the enemy does not lose it",
+			armies: []*Army{p("a", "karsa", 25), en("e", "duna", 30)},
+			orders: []model.Order{move("a", "hollow"), move("e", "karsa")},
+			// They meet on the road between Karsa and Duna Hills: 25 v 30.
+			want:    map[string]want{"a": {"karsa", 17}, "e": {"duna", 27}},
+			battles: 1,
+			owners:  map[string]model.Side{"karsa": model.Player},
 		},
 		{
 			name:   "friendly swap passes freely",
@@ -155,6 +164,54 @@ func TestResolve(t *testing.T) {
 			// Marren: 10 v 30*1.0 -> a bounces (a -> 7). Hollow: a defends 10*1.2 v 10 -> e2 bounces.
 			want:    map[string]want{"a": {"hollow", 6}, "e1": {"marren", 27}, "e2": {"velia", 7}},
 			battles: 2,
+		},
+		{
+			name:   "support adds half the supporter's strength to a move",
+			armies: []*Army{p("a", "velia", 20), p("b", "duna", 20), en("e", "hollow", 25)},
+			orders: []model.Order{move("a", "hollow"), supp("b", "a")},
+			// 20 + 10 = 30 v 25*1.2 = 30: a stand-off, where alone it would lose.
+			want:    map[string]want{"a": {"velia", 18}, "b": {"duna", 20}, "e": {"hollow", 22}},
+			battles: 1,
+		},
+		{
+			name:   "supported attack dislodges",
+			armies: []*Army{p("a", "velia", 20), p("b", "duna", 30), en("e", "hollow", 25)},
+			orders: []model.Order{move("a", "hollow"), supp("b", "a")},
+			// 20 + 15 = 35 > 30: e dislodged, retreats to marren.
+			want:    map[string]want{"a": {"hollow", 18}, "b": {"duna", 30}, "e": {"marren", 17}},
+			battles: 1,
+		},
+		{
+			name:   "support is cut when the supporter is attacked",
+			armies: []*Army{p("a", "velia", 20), p("b", "duna", 30), en("e", "hollow", 25), en("f", "lyde", 10)},
+			orders: []model.Order{move("a", "hollow"), supp("b", "a"), move("f", "duna")},
+			// b is attacked from Lyde, so no support: 20 v 30, a bounces.
+			want:    map[string]want{"a": {"velia", 14}, "b": {"duna", 27}, "e": {"hollow", 22}, "f": {"lyde", 7}},
+			battles: 2,
+		},
+		{
+			name:   "support to hold",
+			armies: []*Army{p("a", "duna", 20), p("b", "karsa", 20), en("e", "hollow", 30)},
+			orders: []model.Order{supp("b", "a"), move("e", "duna")},
+			// a defends 20*1.25 + 10 = 35 v 30.
+			want:    map[string]want{"a": {"duna", 18}, "b": {"karsa", 20}, "e": {"hollow", 21}},
+			battles: 1,
+		},
+		{
+			name:   "support from too far does nothing",
+			armies: []*Army{p("a", "duna", 20), p("b", "oros", 30), en("e", "hollow", 30)},
+			orders: []model.Order{supp("b", "a"), move("e", "duna")},
+			// Oros is not next to Duna Hills: 25 v 30, a dislodged.
+			want:    map[string]want{"a": {"karsa", 14}, "b": {"oros", 30}, "e": {"duna", 27}},
+			battles: 1,
+		},
+		{
+			name:   "a dislodged army never retreats into the province its attacker left",
+			armies: []*Army{p("a", "duna", 10), en("e", "hollow", 30), en("f", "ilth", 30)},
+			orders: []model.Order{move("e", "duna")},
+			// Neighbours of Duna: hollow (attacker came from), karsa, lyde. Karsa is nearest home.
+			want:    map[string]want{"a": {"karsa", 7}, "e": {"duna", 27}},
+			battles: 1,
 		},
 		{
 			name:   "friendly armies may share a province",
@@ -206,8 +263,10 @@ func TestResolveRejectsBadOrders(t *testing.T) {
 	for _, o := range []model.Order{
 		{ArmyID: "nope", Type: model.Hold},
 		move("a", "atlantis"),
-		retreat("a", "marren"), // not adjacent
-		{ArmyID: "a", Type: model.Entrench},
+		retreat("a", "marren"),                             // not adjacent
+		{ArmyID: "a", Type: model.Scout, Target: "marren"}, // not adjacent
+		{ArmyID: "a", Type: model.Support, SupportArmyID: "a"},
+		{ArmyID: "a", Type: "Charge"},
 	} {
 		s := state(e, p("a", "velia", 30))
 		if _, err := e.Resolve(s, []model.Order{o}); err == nil {
@@ -303,3 +362,38 @@ func TestPerceive(t *testing.T) {
 		t.Errorf("quiet = %v", obs.Quiet)
 	}
 }
+
+func TestEntrenchFromTheSecondTurn(t *testing.T) {
+	e := testEngine(t)
+	// 24 on plain Velia against 30: first turn of entrenching gives nothing.
+	s := state(e, p("a", "velia", 24), en("e", "hollow", 26))
+	if _, err := e.Resolve(s, []model.Order{entrench("a")}); err != nil {
+		t.Fatal(err)
+	}
+	if s.Armies["a"].Entrenched != 1 {
+		t.Fatalf("entrenched = %d after one turn", s.Armies["a"].Entrenched)
+	}
+	// Second turn: 24 * (1.0 + 0.25) = 30 > 26, the attack fails.
+	if _, err := e.Resolve(s, []model.Order{entrench("a"), move("e", "velia")}); err != nil {
+		t.Fatal(err)
+	}
+	if a := s.Armies["a"]; a == nil || a.Location != "velia" || a.Entrenched != 2 {
+		t.Fatalf("entrenched army did not hold: %+v", a)
+	}
+	// Without the bonus the same attack would have won.
+	s2 := state(e, p("a", "velia", 24), en("e", "hollow", 26))
+	e.Resolve(s2, []model.Order{move("e", "velia")})
+	if s2.Armies["a"] != nil && s2.Armies["a"].Location == "velia" {
+		t.Error("control: an unentrenched army should have been dislodged")
+	}
+	// Any other order resets the count.
+	e.Resolve(s, nil)
+	if s.Armies["a"].Entrenched != 0 {
+		t.Errorf("entrenchment should reset, got %d", s.Armies["a"].Entrenched)
+	}
+}
+
+func supp(id, whom string) model.Order {
+	return model.Order{ArmyID: id, Type: model.Support, SupportArmyID: whom}
+}
+func entrench(id string) model.Order { return model.Order{ArmyID: id, Type: model.Entrench} }

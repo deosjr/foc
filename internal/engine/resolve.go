@@ -42,7 +42,15 @@ type Move struct {
 type Bounce struct {
 	Army   string `json:"army"`
 	Target string `json:"target"`
-	Reason string `json:"reason"` // "lost" | "standoff" | "retreat-blocked"
+	Reason string `json:"reason"` // "lost" | "standoff" | "field" (won a field battle) | "retreat-blocked"
+}
+
+// SupportResult is what became of one Support order.
+type SupportResult struct {
+	Supporter string `json:"supporter"`
+	Supported string `json:"supported"`
+	Into      string `json:"into"`   // where the supported army meant to fight or hold
+	Status    string `json:"status"` // "given" | "cut" | "too-far" | "same-province"
 }
 
 // Dislodge is a defender driven out of its province.
@@ -77,6 +85,17 @@ type Result struct {
 	Dislodged []Dislodge          `json:"dislodged"`
 	Disbanded []string            `json:"disbanded"`
 	Captures  []Capture           `json:"captures"`
+	Supports  []SupportResult     `json:"supports"`
+}
+
+// SupportOf returns what became of an army's Support order, if it gave one.
+func (r *Result) SupportOf(armyID string) (SupportResult, bool) {
+	for _, s := range r.Supports {
+		if s.Supporter == armyID {
+			return s, true
+		}
+	}
+	return SupportResult{}, false
 }
 
 // BounceOf returns the bounce for an army, if its move failed.
@@ -115,8 +134,39 @@ var sides = []model.Side{model.Enemy, model.Player}
 
 func roundHalfUp(x float64) int { return int(math.Floor(x + 0.5)) }
 
+// resolver holds the working state of one resolution.
+type resolver struct {
+	e        *Engine
+	s        *GameState
+	ids      []string
+	loc      map[string]string
+	dest     map[string]string
+	intended map[string]string    // destination before any bounce
+	dugIn    map[string]bool      // entrenched for a second turn or more
+	support  map[string][]support // supported army -> supports given to it
+}
+
+type support struct {
+	from string // supporting army
+	into string // province the support counts in
+}
+
 // Resolve applies all orders simultaneously and deterministically, mutating
 // the state. Armies without an order hold.
+//
+//  1. Each army's intended destination; non-moving orders stay.
+//  2. Entrenchment counts up; it gives its bonus from the second turn.
+//  3. Supports are checked: the supporter must be next to where the
+//     supported army fights, and is cut if an enemy moves on it (except from
+//     the province the support is aimed into).
+//  4. Field battles: opposing armies moving into each other's provinces meet
+//     on the road between. That is their only battle this turn: the loser
+//     falls back, the winner holds the road and does not advance.
+//  5. Province contests, iterated to a fixed point: a defender has strength
+//     × (terrain + entrenchment) + supports, an attacker strength + supports.
+//     Highest power takes the province; a tie is a stand-off.
+//  6. Dislodged defenders retreat toward their capital, never into a
+//     province an attacker came from or one held by the enemy; else disband.
 func (e *Engine) Resolve(s *GameState, orders []model.Order) (*Result, error) {
 	res := &Result{Turn: s.Turn, Start: map[string]ArmySnap{}}
 	byArmy := map[string]model.Order{}
@@ -128,15 +178,17 @@ func (e *Engine) Resolve(s *GameState, orders []model.Order) (*Result, error) {
 		if _, dup := byArmy[o.ArmyID]; dup {
 			return nil, fmt.Errorf("two orders for army %q", o.ArmyID)
 		}
-		if err := e.validate(a, o); err != nil {
+		if err := e.validate(s, a, o); err != nil {
 			return nil, err
 		}
 		byArmy[o.ArmyID] = o
 	}
 
-	ids := s.ArmyIDs()
-	loc := map[string]string{}
-	dest := map[string]string{}
+	r := &resolver{e: e, s: s, ids: s.ArmyIDs(), loc: map[string]string{}, dest: map[string]string{},
+		intended: map[string]string{}, dugIn: map[string]bool{}, support: map[string][]support{}}
+	ids, loc, dest := r.ids, r.loc, r.dest
+
+	// 1–2. Intentions and entrenchment.
 	for _, id := range ids {
 		a := s.Armies[id]
 		res.Start[id] = ArmySnap{Location: a.Location, Strength: a.Strength, Side: a.Side}
@@ -158,10 +210,44 @@ func (e *Engine) Resolve(s *GameState, orders []model.Order) (*Result, error) {
 				dest[id] = o.Target
 			}
 		}
+		if o.Type == model.Entrench {
+			a.Entrenched++
+		} else {
+			a.Entrenched = 0
+		}
+		r.dugIn[id] = a.Entrenched >= 2
+		r.intended[id] = dest[id]
 	}
-	// Border battles: opposing armies moving into each other's provinces.
+
+	// 3. Supports.
+	for _, id := range ids {
+		o := byArmy[id]
+		if o.Type != model.Support {
+			continue
+		}
+		sr := SupportResult{Supporter: id, Supported: o.SupportArmyID, Into: r.intended[o.SupportArmyID], Status: "given"}
+		switch {
+		case loc[id] == sr.Into:
+			sr.Status = "same-province" // armies in one province already fight together
+		case !e.Map.Adjacent(loc[id], sr.Into):
+			sr.Status = "too-far"
+		default:
+			for _, x := range ids {
+				if s.Armies[x].Side == s.Armies[id].Side.Opponent() && r.intended[x] == loc[id] && loc[x] != sr.Into {
+					sr.Status = "cut"
+					break
+				}
+			}
+		}
+		if sr.Status == "given" {
+			r.support[sr.Supported] = append(r.support[sr.Supported], support{from: id, into: sr.Into})
+		}
+		res.Supports = append(res.Supports, sr)
+	}
+
+	// 4. Field battles.
 	type pair struct{ a, b string }
-	borders := map[pair]bool{}
+	roads := map[pair]bool{}
 	for _, x := range ids {
 		for _, y := range ids {
 			ax, ay := s.Armies[x], s.Armies[y]
@@ -173,66 +259,64 @@ func (e *Engine) Resolve(s *GameState, orders []model.Order) (*Result, error) {
 				if p.b < p.a {
 					p = pair{p.b, p.a}
 				}
-				borders[p] = true
+				roads[p] = true
 			}
 		}
 	}
-	var borderKeys []pair
-	for p := range borders {
-		borderKeys = append(borderKeys, p)
+	var roadKeys []pair
+	for p := range roads {
+		roadKeys = append(roadKeys, p)
 	}
-	sort.Slice(borderKeys, func(i, j int) bool {
-		if borderKeys[i].a != borderKeys[j].a {
-			return borderKeys[i].a < borderKeys[j].a
+	sort.Slice(roadKeys, func(i, j int) bool {
+		if roadKeys[i].a != roadKeys[j].a {
+			return roadKeys[i].a < roadKeys[j].a
 		}
-		return borderKeys[i].b < borderKeys[j].b
+		return roadKeys[i].b < roadKeys[j].b
 	})
-	for _, p := range borderKeys {
+	for _, p := range roadKeys {
 		b := Battle{Province: p.a, Border: p.b, Armies: map[model.Side][]string{}, Power: map[model.Side]float64{}}
+		var fighters []string
 		for _, id := range ids {
 			if (loc[id] == p.a && dest[id] == p.b) || (loc[id] == p.b && dest[id] == p.a) {
 				side := s.Armies[id].Side
 				b.Armies[side] = append(b.Armies[side], id)
-				b.Power[side] += float64(s.Armies[id].Strength)
+				b.Power[side] += float64(s.Armies[id].Strength) + r.supportFor(id, dest[id])
+				fighters = append(fighters, id)
 			}
 		}
 		b.Winner = winner(b.Power)
-		for _, side := range sides {
-			members := b.Armies[side]
-			if side != b.Winner {
-				for _, id := range members {
-					// The loser stays home; on a stand-off both do.
-					reason := "lost"
-					if b.Winner == "" {
-						reason = "standoff"
-					}
-					res.Bounces = append(res.Bounces, Bounce{Army: id, Target: dest[id], Reason: reason})
-					dest[id] = loc[id]
-				}
+		for _, id := range fighters {
+			reason := "lost"
+			switch b.Winner {
+			case "":
+				reason = "standoff"
+			case s.Armies[id].Side:
+				reason = "field"
 			}
+			res.Bounces = append(res.Bounces, Bounce{Army: id, Target: dest[id], Reason: reason})
+			dest[id] = loc[id]
 		}
 		e.applyCasualties(s, &b)
 		res.Battles = append(res.Battles, b)
 	}
 
-	// Province contests, iterated to a fixed point: a bounced attacker becomes
-	// a defender of its home province, which can change that contest.
+	// 5. Province contests, iterated to a fixed point: a bounced attacker
+	// becomes a defender of its home province, which can change that contest.
 	bounced := map[string][]string{} // province -> attackers that bounced from it
 	provinces := e.Map.IDs()
 	for changed := true; changed; {
 		changed = false
 		for _, p := range provinces {
-			power, members := e.contest(s, p, ids, loc, dest, nil)
+			power, members := r.contest(p, nil)
 			if len(members) < 2 {
 				continue
 			}
 			w := winner(power)
 			for _, side := range sides {
-				list := members[side]
 				if side == w {
 					continue
 				}
-				for _, id := range list {
+				for _, id := range members[side] {
 					if loc[id] != p { // an attacker that lost or stood off
 						reason := "lost"
 						if w == "" {
@@ -252,9 +336,10 @@ func (e *Engine) Resolve(s *GameState, orders []model.Order) (*Result, error) {
 	// All winners are decided before any casualties are taken, so the order
 	// in which battles are recorded cannot change their outcomes.
 	var dislodged []string
+	attackersFrom := map[string][]string{} // dislodged army -> provinces its attackers came from
 	var final []Battle
 	for _, p := range provinces {
-		power, members := e.contest(s, p, ids, loc, dest, bounced[p])
+		power, members := r.contest(p, bounced[p])
 		if len(members) < 2 {
 			continue
 		}
@@ -263,6 +348,11 @@ func (e *Engine) Resolve(s *GameState, orders []model.Order) (*Result, error) {
 			for _, id := range members[b.Winner.Opponent()] {
 				if loc[id] == p && dest[id] == p {
 					dislodged = append(dislodged, id)
+					for _, w := range members[b.Winner] {
+						if loc[w] != p {
+							attackersFrom[id] = append(attackersFrom[id], loc[w])
+						}
+					}
 				}
 			}
 		}
@@ -278,16 +368,17 @@ func (e *Engine) Resolve(s *GameState, orders []model.Order) (*Result, error) {
 			res.Moves = append(res.Moves, Move{Army: id, From: loc[id], To: dest[id]})
 		}
 	}
-	// Dislodged armies retreat toward their own capital, or disband.
+	// 6. Dislodged armies retreat toward their own capital, or disband.
 	sort.Strings(dislodged)
 	gone := map[string]bool{}
 	for _, id := range dislodged {
 		a := s.Armies[id]
 		to := ""
 		if a.Strength >= e.Rules.DisbandBelow {
-			to = e.retreatFor(s, a, loc[id], dest)
+			to = e.retreatFor(s, a, loc[id], dest, attackersFrom[id])
 		}
 		res.Dislodged = append(res.Dislodged, Dislodge{Army: id, From: loc[id], To: to})
+		a.Entrenched = 0
 		if to == "" {
 			gone[id] = true
 		} else {
@@ -327,22 +418,28 @@ func (e *Engine) Resolve(s *GameState, orders []model.Order) (*Result, error) {
 	return res, nil
 }
 
-func (e *Engine) validate(a *Army, o model.Order) error {
+func (e *Engine) validate(s *GameState, a *Army, o model.Order) error {
 	switch o.Type {
-	case model.Hold:
+	case model.Hold, model.Entrench:
 		return nil
 	case model.MoveToward:
 		if e.Map.Province(o.Target) == nil {
 			return fmt.Errorf("army %s: MoveToward unknown province %q", a.ID, o.Target)
 		}
 		return nil
-	case model.Retreat:
+	case model.Retreat, model.Scout:
 		if !e.Map.Adjacent(a.Location, o.Target) {
-			return fmt.Errorf("army %s: Retreat target %q is not adjacent to %s", a.ID, o.Target, a.Location)
+			return fmt.Errorf("army %s: %s target %q is not adjacent to %s", a.ID, o.Type, o.Target, a.Location)
+		}
+		return nil
+	case model.Support:
+		other := s.Armies[o.SupportArmyID]
+		if other == nil || other.Side != a.Side || other.ID == a.ID {
+			return fmt.Errorf("army %s: cannot support %q", a.ID, o.SupportArmyID)
 		}
 		return nil
 	}
-	return fmt.Errorf("army %s: order type %q is not supported yet", a.ID, o.Type)
+	return fmt.Errorf("army %s: unknown order type %q", a.ID, o.Type)
 }
 
 func (e *Engine) occupiedBy(s *GameState, province string, side model.Side) bool {
@@ -354,28 +451,48 @@ func (e *Engine) occupiedBy(s *GameState, province string, side model.Side) bool
 	return false
 }
 
+// supportFor sums the support given to an army fighting in a province.
+func (r *resolver) supportFor(id, province string) float64 {
+	total := 0.0
+	for _, sp := range r.support[id] {
+		if sp.into == province {
+			if a := r.s.Armies[sp.from]; a != nil {
+				total += r.e.Rules.SupportFraction * float64(a.Strength)
+			}
+		}
+	}
+	return total
+}
+
 // contest gathers every army whose destination is p (plus extra bounced
 // attackers) and computes each side's power: defenders get the terrain
-// multiplier, attackers fight at face value.
-func (e *Engine) contest(s *GameState, p string, ids []string, loc, dest map[string]string, extra []string) (map[model.Side]float64, map[model.Side][]string) {
+// multiplier and any entrenchment bonus, attackers fight at face value;
+// both add their supports.
+func (r *resolver) contest(p string, extra []string) (map[model.Side]float64, map[model.Side][]string) {
 	power := map[model.Side]float64{}
 	members := map[model.Side][]string{}
 	add := func(id string) {
-		a := s.Armies[id]
+		a := r.s.Armies[id]
 		str := float64(a.Strength)
-		if loc[id] == p && dest[id] == p {
-			str *= e.Map.Defence(p)
+		if r.loc[id] == p && r.dest[id] == p {
+			mult := r.e.Map.Defence(p)
+			if r.dugIn[id] {
+				mult += r.e.Rules.EntrenchBonus
+			}
+			str *= mult
 		}
-		power[a.Side] += str
+		// Supports count where the fight is, also for a bounced attacker
+		// re-counted in the battle it lost.
+		power[a.Side] += str + r.supportFor(id, p)
 		members[a.Side] = append(members[a.Side], id)
 	}
-	for _, id := range ids {
-		if dest[id] == p {
+	for _, id := range r.ids {
+		if r.dest[id] == p {
 			add(id)
 		}
 	}
 	for _, id := range extra {
-		if dest[id] != p {
+		if r.dest[id] != p {
 			add(id)
 		}
 	}
@@ -428,12 +545,18 @@ func (e *Engine) applyCasualties(s *GameState, b *Battle) {
 }
 
 // retreatFor picks the adjacent province with no opposing army that is
-// closest to the army's own capital, ties broken by province id.
-func (e *Engine) retreatFor(s *GameState, a *Army, from string, dest map[string]string) string {
+// closest to the army's own capital, ties broken by province id. It never
+// retreats into a province its attackers came from.
+func (e *Engine) retreatFor(s *GameState, a *Army, from string, dest map[string]string, attackersFrom []string) string {
 	capital := e.Map.Capital(a.Side)
 	best, bestD := "", math.MaxInt
 	for _, n := range e.Map.Neighbours(from) { // sorted by id
 		hostile := false
+		for _, af := range attackersFrom {
+			if af == n {
+				hostile = true
+			}
+		}
 		for id, d := range dest {
 			if d == n && s.Armies[id] != nil && s.Armies[id].Side == a.Side.Opponent() {
 				hostile = true

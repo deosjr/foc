@@ -223,7 +223,12 @@ type Ruleset struct {
 	Name           string `yaml:"name"`
 	MenPerStrength int    `yaml:"men_per_strength"`
 	DisbandBelow   int    `yaml:"disband_below"`
-	Casualties     struct {
+	// SupportFraction of a supporter's strength is added to the army it
+	// supports; EntrenchBonus is added to the terrain multiplier of an army
+	// entrenched for a second turn or more.
+	SupportFraction float64 `yaml:"support_fraction"`
+	EntrenchBonus   float64 `yaml:"entrench_bonus"`
+	Casualties      struct {
 		Loser    float64 `yaml:"loser"`
 		Winner   float64 `yaml:"winner"`
 		Standoff float64 `yaml:"standoff"`

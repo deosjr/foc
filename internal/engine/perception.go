@@ -11,7 +11,8 @@ import (
 // ObservedBattle is a battle as one general saw it.
 type ObservedBattle struct {
 	Place           string `json:"place"`
-	Result          string `json:"result"` // "won" | "lost" | "stand-off"
+	Road            string `json:"road,omitempty"` // a field battle on the road between Place and Road
+	Result          string `json:"result"`         // "won" | "lost" | "stand-off"
 	EnemyLosses     int    `json:"enemy_losses"`
 	TrueEnemyLosses int    `json:"true_enemy_losses"`
 }
@@ -48,6 +49,9 @@ type Observation struct {
 	Sightings   []Sighting       `json:"sightings"`
 	Quiet       []string         `json:"quiet"` // adjacent provinces seen free of the enemy
 	Friendly    []Contact        `json:"friendly"`
+	Scouted     string           `json:"scouted,omitempty"`
+	Support     *SupportResult   `json:"support,omitempty"`
+	Entrenched  int              `json:"entrenched"` // consecutive turns dug in
 }
 
 func roundTo(x float64, step int) int {
@@ -74,6 +78,12 @@ func (e *Engine) Perceive(s *GameState, res *Result, generalID, armyID string, r
 	if d, ok := res.DislodgeOf(armyID); ok {
 		obs.RetreatedTo = d.To
 	}
+	if sr, ok := res.SupportOf(armyID); ok {
+		obs.Support = &sr
+	}
+	if obs.Order.Type == model.Scout {
+		obs.Scouted = obs.Order.Target
+	}
 	a := s.Armies[armyID]
 	if a == nil {
 		obs.Disbanded = true
@@ -83,6 +93,7 @@ func (e *Engine) Perceive(s *GameState, res *Result, generalID, armyID string, r
 		obs.Location = a.Location
 		obs.Strength = a.Strength
 		obs.Losses = start.Strength - a.Strength
+		obs.Entrenched = a.Entrenched
 	}
 
 	noise := func(x float64, n float64) float64 { return x * (1 - n + 2*n*rng.Float64()) }
@@ -91,7 +102,7 @@ func (e *Engine) Perceive(s *GameState, res *Result, generalID, armyID string, r
 		if !ok {
 			continue
 		}
-		ob := ObservedBattle{Place: b.Province}
+		ob := ObservedBattle{Place: b.Province, Road: b.Border}
 		switch b.Winner {
 		case "":
 			ob.Result = "stand-off"
@@ -129,6 +140,11 @@ func (e *Engine) Perceive(s *GameState, res *Result, generalID, armyID string, r
 			if p != obs.Location {
 				obs.Quiet = append(obs.Quiet, p)
 			}
+			continue
+		}
+		if p == obs.Scouted && p != obs.Location {
+			// A scouted province is seen exactly; no noise draw.
+			obs.Sightings = append(obs.Sightings, Sighting{Province: p, Strength: enemy, TrueStrength: enemy, Exact: true})
 			continue
 		}
 		seenStr := int(math.Max(float64(step), float64(roundTo(noise(float64(enemy), e.Rules.Perception.AdjacentStrengthNoise), step))))

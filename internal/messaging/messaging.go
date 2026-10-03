@@ -49,11 +49,21 @@ func (c Couriers) Intercept(route []string, enemyNear func(province string) bool
 
 // NextStanding returns the standing order a general carries into the next
 // turn. MoveToward persists until the target is reached or the army loses a
-// battle on the way; every other PoC order reverts to Hold.
+// battle on the way; Entrench persists; every other order reverts to Hold.
 func NextStanding(o model.Order, res *engine.Result, s *engine.GameState) model.Order {
 	hold := model.Order{ArmyID: o.ArmyID, Type: model.Hold}
 	a := s.Armies[o.ArmyID]
-	if a == nil || o.Type != model.MoveToward {
+	if a == nil {
+		return hold
+	}
+	if o.Type == model.Entrench {
+		// Digging in persists until other orders arrive, unless driven out.
+		if _, ok := res.DislodgeOf(o.ArmyID); ok {
+			return hold
+		}
+		return o
+	}
+	if o.Type != model.MoveToward {
 		return hold
 	}
 	if a.Location == o.Target {
