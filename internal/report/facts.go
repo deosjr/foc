@@ -29,6 +29,8 @@ type ReportFacts struct {
 	Support          *SupportFacts   `json:"support,omitempty"`
 	EntrenchedTurns  int             `json:"entrenched_turns,omitempty"` // 2 or more: fully dug in
 	Scouted          string          `json:"scouted,omitempty"`
+	Watching         string          `json:"watching,omitempty"`    // a condition from your letter he still watches for
+	WatchFired       string          `json:"watch_fired,omitempty"` // a condition that came to pass, and what he did
 	Clarification    *ClarifyFacts   `json:"clarification_needed,omitempty"`
 }
 
@@ -95,7 +97,7 @@ func (f ReportFacts) Text() string {
 		parts = append(parts, c.General, c.Province)
 	}
 	parts = append(parts, f.Concerns...)
-	parts = append(parts, f.RefusedOrder, f.Scouted)
+	parts = append(parts, f.RefusedOrder, f.Scouted, f.Watching, f.WatchFired)
 	if f.Support != nil {
 		parts = append(parts, f.Support.General, f.Support.At)
 	}

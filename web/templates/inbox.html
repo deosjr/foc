@@ -18,6 +18,8 @@
 
 {{define "debug-body"}}
   <p><b>Order carried out:</b> {{.Order}} <i>({{.OrderSource}})</i></p>
+  {{if .WatchFired}}<p><b>Watch fired:</b> {{.WatchFired}}</p>{{end}}
+  {{if .Watching}}<p><b>Still watching:</b> {{.Watching}}</p>{{end}}
   {{range .Interpretations}}<div class="interp">
     <p><b>Letter {{.LetterID}}</b>, sent turn {{.SentTurn}}:</p>
     <blockquote>{{.Letter}}</blockquote>
@@ -29,6 +31,7 @@
       {{if .Reweighted}}<table><caption>Reweighted</caption>{{range .Reweighted}}<tr{{if .Chosen}} class="chosen"{{end}}><td>{{.Key}}</td><td>×{{f2 .Weight}}</td><td>{{pct .P}}</td></tr>{{end}}</table>{{end}}
     </div>
     <p>draws {{f2 .Draw}} / initiative {{f2 .Initiative}} / refusal {{f2 .RefuseDraw}} → step <b>{{.Step}}</b> → {{.Outcome}}: {{.Order}}{{if .Refused}} <span class="warn">(refused: {{.Refused}})</span>{{end}}</p>
+    {{if .Watch}}<p><b>Watch set:</b> {{.Watch}}</p>{{end}}
     {{if .Rationale}}<p class="rationale">“{{.Rationale}}”</p>{{end}}
   </div>{{end}}
   {{if .Rows}}<table class="distort"><caption>Distortion</caption>

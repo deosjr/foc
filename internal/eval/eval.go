@@ -24,7 +24,7 @@ import (
 // Letter is one labelled case.
 type Letter struct {
 	ID       string            `yaml:"id"`
-	Class    string            `yaml:"class"` // clear | ambiguous | unclear | none
+	Class    string            `yaml:"class"` // clear | ambiguous | conditional | unclear | none
 	General  string            `yaml:"general"`
 	Location string            `yaml:"location"`
 	Friendly map[string]string `yaml:"friendly"` // general id -> province id
@@ -35,6 +35,10 @@ type Letter struct {
 		Action string `yaml:"action"`
 		Target string `yaml:"target"`
 		Whom   string `yaml:"whom"` // general id a support letter means
+		// Conditional letters: the triggers that would be a fair reading,
+		// and what to do when one fires.
+		Trigger []string `yaml:"trigger"`
+		Then    string   `yaml:"then"`
 	} `yaml:"expect"`
 	Accept   []string `yaml:"accept"`
 	Readings []string `yaml:"readings"`
@@ -68,7 +72,9 @@ func Load(path string, m *mapdata.Map, gens map[string]*model.General) ([]Letter
 			return nil, fmt.Errorf("%s: %s: clear letter without expect.action", path, l.ID)
 		case l.Class == "ambiguous" && len(l.Readings) < 2:
 			return nil, fmt.Errorf("%s: %s: ambiguous letter needs at least two readings", path, l.ID)
-		case l.Class != "clear" && l.Class != "ambiguous" && l.Class != "unclear" && l.Class != "none":
+		case l.Class == "conditional" && (len(l.Expect.Trigger) == 0 || l.Expect.Then == "" || l.Expect.Action == ""):
+			return nil, fmt.Errorf("%s: %s: conditional letter needs expect.action, expect.trigger and expect.then", path, l.ID)
+		case l.Class != "clear" && l.Class != "ambiguous" && l.Class != "conditional" && l.Class != "unclear" && l.Class != "none":
 			return nil, fmt.Errorf("%s: %s: bad class %q", path, l.ID, l.Class)
 		}
 		for _, t := range []string{l.Expect.Target, l.Target} {
@@ -95,6 +101,7 @@ type Result struct {
 	Confident  bool               // clear letters: top action reached the clear threshold
 	PMove      map[string]float64 // ambiguous: P(move) per general after reweighting
 	Diverge    string             // ambiguous: "as traits predict" | "same" | "against traits"
+	Watch      string             // the condition the general would watch for, in words
 	Annotation string
 }
 
@@ -103,6 +110,8 @@ type Summary struct {
 	Clear, ClearAgree, ClearConfident int
 	Ambiguous, AmbInReadings          int
 	AmbSplit, AmbDiverge, AmbAgainst  int // AmbSplit: letters that reached the ambiguous branch
+	Conditional, CondAgree            int
+	ClearWithWatch                    int // clear letters wrongly read as conditional
 	Unclear, UnclearAgree             int
 	None, NoneAgree                   int
 	Errors                            int
@@ -150,6 +159,9 @@ func Run(ctx context.Context, dm decision.Model, letters []Letter, s Setup) ([]R
 			if r.Confident {
 				sum.ClearConfident++
 			}
+			if r.Watch != "" {
+				sum.ClearWithWatch++
+			}
 		case "ambiguous":
 			sum.Ambiguous++
 			if r.Agree {
@@ -163,6 +175,11 @@ func Run(ctx context.Context, dm decision.Model, letters []Letter, s Setup) ([]R
 				sum.AmbDiverge++
 			case "against traits":
 				sum.AmbAgainst++
+			}
+		case "conditional":
+			sum.Conditional++
+			if r.Agree {
+				sum.CondAgree++
 			}
 		case "unclear":
 			sum.Unclear++
@@ -219,10 +236,13 @@ func one(ctx context.Context, dm decision.Model, l Letter, s Setup) Result {
 	decide := func(g *model.General) generals.Decision {
 		// A fixed middle draw for sampling; never own judgement or refusal,
 		// so unclear letters show up as requests for clarification.
-		return generals.Interpret(ans, g.Traits, sit, s.Thresholds, actions, generals.Draws{Sample: 0.5, Initiative: 1, Refuse: 1})
+		return generals.Interpret(ans, g.Traits, sit, s.Thresholds, actions, generals.Draws{Sample: 0.5, Initiative: 1, Refuse: 1, Then: 0.5})
 	}
 	own := decide(gen)
 	r.Outcome = own.Outcome
+	if own.Watch != nil {
+		r.Watch = generals.DescribeWatch(own.Watch, s.Map)
+	}
 
 	switch l.Class {
 	case "clear":
@@ -275,6 +295,25 @@ func one(ctx context.Context, dm decision.Model, l Letter, s Setup) Result {
 		default:
 			r.Diverge = "same"
 		}
+	case "conditional":
+		w := own.Watch
+		okNow := r.TopAction == l.Expect.Action
+		for _, a := range l.Accept {
+			okNow = okNow || r.TopAction == a
+		}
+		okTrig := false
+		if w != nil {
+			for _, tr := range l.Expect.Trigger {
+				okTrig = okTrig || string(w.Trigger.Kind) == tr
+			}
+		}
+		r.Agree = okNow && okTrig && w.Action == l.Expect.Then
+		switch {
+		case w == nil:
+			r.Annotation = "no condition read"
+		case !r.Agree:
+			r.Annotation = fmt.Sprintf("now %s, watch %q", r.TopAction, r.Watch)
+		}
 	case "unclear":
 		r.Agree = own.Unclear()
 	case "none":
@@ -309,6 +348,10 @@ func Report(w io.Writer, provider string, results []Result, sum Summary, verbose
 			if !r.Confident {
 				verdict += " (below clear threshold)"
 			}
+		case "conditional":
+			if r.Watch != "" && r.Agree {
+				verdict += "  " + r.Watch
+			}
 		case "ambiguous":
 			verdict += fmt.Sprintf("  P(move) Velk %s Saris %s: %s", pct(r.PMove["velk"]), pct(r.PMove["saris"]), r.Diverge)
 		}
@@ -321,6 +364,11 @@ func Report(w io.Writer, provider string, results []Result, sum Summary, verbose
 			fmt.Fprintf(tw, "\t\t\t%q\n", l.Letter)
 			fmt.Fprintf(tw, "\t\t\taction %s  engagement %.2f  addressed %.2f  plausible %.2f\n",
 				dist(r.Answers.Action), r.Answers.Engagement, r.Answers.Addressed, r.Answers.Plausible)
+			if r.Answers.Conditional >= 0.2 {
+				fmt.Fprintf(tw, "\t\t\tconditional %.2f  trigger %s  at %s  then %s  then-target %s\n",
+					r.Answers.Conditional, dist(r.Answers.Trigger), top(r.Answers.TriggerPlace),
+					dist(r.Answers.ThenAction), top(r.Answers.ThenTarget))
+			}
 		}
 	}
 	tw.Flush()
@@ -330,9 +378,21 @@ func Report(w io.Writer, provider string, results []Result, sum Summary, verbose
 		ratio(sum.AmbInReadings, sum.Ambiguous), ratio(sum.AmbSplit, sum.Ambiguous))
 	fmt.Fprintf(w, "                   of which Velk is likelier to march than Saris in %s, the reverse in %d\n",
 		ratio(sum.AmbDiverge, sum.AmbSplit), sum.AmbAgainst)
+	fmt.Fprintf(w, "Conditional:       %s read with the expected condition and actions; %d clear letters wrongly read as conditional\n",
+		ratio(sum.CondAgree, sum.Conditional), sum.ClearWithWatch)
 	fmt.Fprintf(w, "Unclear letters:   %s read as unclear (the general asks, or uses his own judgement)\n", ratio(sum.UnclearAgree, sum.Unclear))
 	fmt.Fprintf(w, "No instruction:    %s ignored\n", ratio(sum.NoneAgree, sum.None))
 	fmt.Fprintf(w, "Errors:            %d of %d\n", sum.Errors, len(results))
+}
+
+func top(p map[string]float64) string {
+	best, bp := "-", -1.0
+	for k, v := range p {
+		if v > bp || (v == bp && k < best) {
+			best, bp = k, v
+		}
+	}
+	return fmt.Sprintf("%s %.2f", best, bp)
 }
 
 func dist(p map[string]float64) string {

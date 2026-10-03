@@ -113,6 +113,8 @@ type DebugView struct {
 	OrderSource     string
 	Rows            []DistortRow // true vs observed vs reported
 	Omitted         []string     // bad news left out of the report
+	Watching        string       // a condition he still watches for
+	WatchFired      string       // a condition that fired this turn
 	Attempts        int
 	Violations      [][]string
 	FellBack        bool
@@ -139,6 +141,7 @@ type InterpView struct {
 	Initiative float64
 	RefuseDraw float64
 	Refused    string
+	Watch      string
 }
 
 type Prob struct {
@@ -216,6 +219,9 @@ func buildDebug(g *game.Game, d *game.TurnDebug) *DebugView {
 		if in.Refused != nil {
 			iv.Refused = interpret.DescribeOrder(*in.Refused, m)
 		}
+		if in.Watch != nil {
+			iv.Watch = generals.DescribeWatch(in.Watch, m)
+		}
 		if in.Reweighted != nil {
 			iv.Reweighted = probs(in.Reweighted, in.Weights, name, chosen, 0)
 		}
@@ -241,6 +247,7 @@ func buildDebug(g *game.Game, d *game.TurnDebug) *DebugView {
 			hundreds(s.TrueStrength), hundreds(s.Strength), rep})
 	}
 	dv.Omitted = d.Omitted
+	dv.Watching, dv.WatchFired = d.Watching, d.WatchFired
 	dv.FactsJSON = factsJSON(f)
 	return dv
 }

@@ -17,14 +17,16 @@ questions:
   - id: action
     kind: choice
     prompt: >-
-      What is {{.General}} most plausibly being told to do now? hold = stay in
-      {{.Location}} and defend it; move = march toward some province, whether to
-      attack, occupy or join someone there; support = stay put and lend strength
-      to a named fellow general's attack or defence nearby; entrench = dig in
-      where he stands and fortify; scout = stay put and send riders to see into
-      a neighbouring province; retreat = fall back away from the enemy to a
-      neighbouring province; unclear = the instruction cannot be made out from
-      the letter.
+      What is {{.General}} told to do now? If the letter makes some action
+      depend on a condition ("if they cross, attack"), answer what he should
+      do until or unless the condition is met (often hold). hold = stay in
+      {{.Location}} and defend it; move = march toward some province, whether
+      to attack, occupy or join someone there; support = stay put and lend
+      strength to a named fellow general's attack or defence nearby; entrench
+      = dig in where he stands and fortify; scout = stay put and send riders
+      to see into a neighbouring province; retreat = fall back away from the
+      enemy to a neighbouring province; unclear = the instruction cannot be
+      made out from the letter.
     options: [hold, move, support, entrench, scout, retreat, unclear]
   - id: target
     kind: choice
@@ -39,6 +41,39 @@ questions:
       Which fellow general, if any, is {{.General}} told to support or aid?
       Answer none if no fellow general is to be supported.
     options_from: friendly_generals
+  - id: conditional
+    kind: binary
+    prompt: >-
+      Does the letter make some action by {{.General}} depend on something
+      that may or may not happen later ("if they cross the ford, attack",
+      "should they come in force, fall back")?
+  - id: trigger
+    kind: choice
+    prompt: >-
+      If the letter sets such a condition, what is it? enemy_at = the enemy
+      appearing in or near a place; attacked = {{.General}} being attacked;
+      outnumbered = the enemy coming in greater force than his own; place_lost
+      = a place falling to the enemy; none = there is no condition; unclear =
+      there is a condition but it cannot be made out.
+    options: [enemy_at, attacked, outnumbered, place_lost, none, unclear]
+  - id: trigger_place
+    kind: choice
+    prompt: >-
+      Which province does the condition concern? Answer none if it names no
+      particular place (for example "if they come near you").
+    options_from: provinces
+  - id: then_action
+    kind: choice
+    prompt: >-
+      If the condition is met, what should {{.General}} then do? Same meanings
+      as before; none if the letter sets no condition.
+    options: [hold, move, support, entrench, scout, retreat, none, unclear]
+  - id: then_target
+    kind: choice
+    prompt: >-
+      If the condition is met, which province should he then march to, fall
+      back to or scout? none if that action needs no place.
+    options_from: provinces
   - id: engagement
     kind: score
     prompt: >-

@@ -46,6 +46,7 @@ type Draws struct {
 	Sample     float64 `json:"sample"`     // step 5: which reading of an ambiguous letter
 	Initiative float64 `json:"initiative"` // step 4: own judgement or ask
 	Refuse     float64 `json:"refuse"`     // step 8: quiet refusal
+	Then       float64 `json:"then"`       // which reading of an ambiguous "then" action
 }
 
 // Situation is what the policy needs to know about the general's position
@@ -73,6 +74,7 @@ type Decision struct {
 	Target     string             `json:"target,omitempty"`
 	Order      *model.Order       `json:"order,omitempty"`
 	Refused    *model.Order       `json:"refused,omitempty"` // the order he would not carry out
+	Watch      *model.Contingency `json:"watch,omitempty"`   // the "if X, then Y" half, if any
 	Weights    map[string]float64 `json:"weights,omitempty"` // per-action multipliers in the ambiguous case
 	Reweighted map[string]float64 `json:"reweighted,omitempty"`
 	Draws      Draws              `json:"draws"`
@@ -139,65 +141,28 @@ func Interpret(a interpret.Answers, t model.Traits, sit Situation, th Thresholds
 		d.Action = sample(d.Reweighted, actionOrder, dr.Sample)
 	}
 
-	// Step 7: parameters from the target question.
-	order := model.Order{ArmyID: sit.ArmyID, Type: model.Hold}
-	switch d.Action {
-	case ActHold:
-	case ActMove:
-		target := topTarget(a, sit.Map)
-		if target == interpret.None || target == interpret.Unclear {
-			return unclear(d, t, sit, "no-target")
+	// Step 7: parameters from the target and support questions.
+	order, why, ok := OrderFor(d.Action, topTarget(a.Target, sit.Map), topWhom(a, sit), sit)
+	if !ok {
+		return unclear(d, t, sit, why)
+	}
+	if order.Type == model.MoveToward || order.Type == model.Retreat || order.Type == model.Scout {
+		d.Target = order.Target
+		if order.Type == model.Retreat || order.Type == model.Scout {
+			d.Target = topTarget(a.Target, sit.Map)
 		}
-		d.Target = target
-		if target != sit.Location {
-			order = model.Order{ArmyID: sit.ArmyID, Type: model.MoveToward, Target: target}
-		}
-	case ActRetreat:
-		target := topTarget(a, sit.Map)
-		capital := sit.Map.Capital(sit.Side)
-		if target == interpret.None || target == interpret.Unclear ||
-			sit.Map.Distance(target, capital) >= sit.Map.Distance(sit.Location, capital) {
-			// "Fall back!" names no place, or names one that is not
-			// homeward (usually the place the letter mentions as the
-			// danger): fall back toward home.
-			target = capital
-		}
-		d.Target = target
-		if target != sit.Location {
-			step := target
-			if !sit.Map.Adjacent(sit.Location, target) {
-				step = sit.Map.NextStep(sit.Location, target)
-			}
-			order = model.Order{ArmyID: sit.ArmyID, Type: model.Retreat, Target: step}
-		}
-	case ActEntrench:
-		order = model.Order{ArmyID: sit.ArmyID, Type: model.Entrench}
-	case ActScout:
-		target := topTarget(a, sit.Map)
-		if sit.Map.Province(target) == nil || target == sit.Location {
-			return unclear(d, t, sit, "no-target")
-		}
-		d.Target = target
-		if !sit.Map.Adjacent(sit.Location, target) {
-			// Riders go one province; look toward the place named.
-			target = sit.Map.NextStep(sit.Location, target)
-		}
-		order = model.Order{ArmyID: sit.ArmyID, Type: model.Scout, Target: target}
-	case ActSupport:
-		names := make([]string, 0, len(sit.Friends))
-		for n := range sit.Friends {
-			names = append(names, n)
-		}
-		sort.Strings(names)
-		whom, _ := interpret.Top(a.Whom, names)
-		army, ok := sit.Friends[whom]
+	}
+	if order.Type == model.Support {
+		d.Target = topWhom(a, sit)
+	}
+
+	// The conditional half: one "if X, then Y", watched from the next turn.
+	if a.Conditional >= 0.5 {
+		watch, why, ok := contingency(a, t, sit, th, actionOrder, dr.Then)
 		if !ok {
-			return unclear(d, t, sit, "no-support-target")
+			return unclear(d, t, sit, why)
 		}
-		d.Target = whom
-		order = model.Order{ArmyID: sit.ArmyID, Type: model.Support, SupportArmyID: army}
-	default:
-		return unclear(d, t, sit, "unknown-action")
+		d.Watch = watch
 	}
 
 	// Step 8: a disloyal general may quietly refuse to attack a place he
@@ -215,6 +180,137 @@ func Interpret(a interpret.Answers, t model.Traits, sit Situation, th Thresholds
 	d.Outcome = OutcomeOrder
 	d.Order = &order
 	return d
+}
+
+// OrderFor turns an action and its parameters into an order from the
+// general's current position. target is a province id, "none" or
+// "unclear"; whom is a fellow general's name. If the action needs a
+// parameter the letter did not give, ok is false and why names what is
+// missing.
+func OrderFor(action, target, whom string, sit Situation) (order model.Order, why string, ok bool) {
+	order = model.Order{ArmyID: sit.ArmyID, Type: model.Hold}
+	known := sit.Map.Province(target) != nil
+	switch action {
+	case ActHold:
+	case ActEntrench:
+		order.Type = model.Entrench
+	case ActMove:
+		if !known {
+			return order, "no-target", false
+		}
+		if target != sit.Location {
+			order = model.Order{ArmyID: sit.ArmyID, Type: model.MoveToward, Target: target}
+		}
+	case ActRetreat:
+		capital := sit.Map.Capital(sit.Side)
+		if !known || sit.Map.Distance(target, capital) >= sit.Map.Distance(sit.Location, capital) {
+			// "Fall back!" names no place, or names one that is not
+			// homeward (usually the place the letter mentions as the
+			// danger): fall back toward home.
+			target = capital
+		}
+		if target != sit.Location {
+			step := target
+			if !sit.Map.Adjacent(sit.Location, target) {
+				step = sit.Map.NextStep(sit.Location, target)
+			}
+			order = model.Order{ArmyID: sit.ArmyID, Type: model.Retreat, Target: step}
+		}
+	case ActScout:
+		if !known || target == sit.Location {
+			return order, "no-target", false
+		}
+		if !sit.Map.Adjacent(sit.Location, target) {
+			// Riders go one province; look toward the place named.
+			target = sit.Map.NextStep(sit.Location, target)
+		}
+		order = model.Order{ArmyID: sit.ArmyID, Type: model.Scout, Target: target}
+	case ActSupport:
+		army, ok := sit.Friends[whom]
+		if !ok {
+			return order, "no-support-target", false
+		}
+		order = model.Order{ArmyID: sit.ArmyID, Type: model.Support, SupportArmyID: army}
+	default:
+		return order, "unknown-action", false
+	}
+	return order, "", true
+}
+
+// triggers are the trigger answers that name a condition.
+var triggers = []string{string(model.EnemyAt), string(model.Attacked), string(model.Outnumbered), string(model.PlaceLost), "none", "unclear"}
+
+// thenActions are the options of the then_action question.
+var thenActions = []string{ActHold, ActMove, ActSupport, ActEntrench, ActScout, ActRetreat, "none", ActUnclear}
+
+// contingency reads the "if X, then Y" half of a letter. The "then" action
+// gets the same treatment as the main one: taken as read when clear,
+// reweighted by temperament and sampled when ambiguous.
+func contingency(a interpret.Answers, t model.Traits, sit Situation, th Thresholds, actionOrder []string, draw float64) (*model.Contingency, string, bool) {
+	trig, _ := interpret.Top(a.Trigger, triggers)
+	switch trig {
+	case "none", "":
+		return nil, "", true // no condition after all
+	case "unclear":
+		return nil, "unclear-condition", false
+	}
+	w := &model.Contingency{Trigger: model.Trigger{Kind: model.TriggerKind(trig)}}
+	if p := topTarget(a.TriggerPlace, sit.Map); sit.Map.Province(p) != nil {
+		w.Trigger.Place = p
+	}
+	act, pTop := interpret.Top(a.ThenAction, thenActions)
+	switch {
+	case act == "none" || act == ActUnclear || pTop < th.Unclear:
+		return nil, "unclear-condition", false
+	case pTop < th.Clear:
+		weights := map[string]float64{}
+		sum := 0.0
+		for _, x := range actionOrder {
+			if x == ActUnclear {
+				continue
+			}
+			wt := 1.0
+			switch category(x, interpret.Answers{Target: a.ThenTarget}, sit) {
+			case aggressive:
+				wt = (0.5 + t.Aggression) * (0.5 + a.Engagement)
+			case defensive:
+				wt = (0.5 + t.Caution) * (1.5 - a.Engagement)
+			}
+			weights[x] = a.ThenAction[x] * wt
+			sum += weights[x]
+		}
+		if sum <= 0 {
+			return nil, "unclear-condition", false
+		}
+		for k := range weights {
+			weights[k] /= sum
+		}
+		act = sample(weights, actionOrder, draw)
+	}
+	w.Action = act
+	w.Target = topTarget(a.ThenTarget, sit.Map)
+	if sit.Map.Province(w.Target) == nil {
+		w.Target = ""
+		if act == ActMove || act == ActScout {
+			// "Strike if they cross" names no place: strike where the
+			// condition is.
+			w.Target = w.Trigger.Place
+		}
+	}
+	if act == ActSupport {
+		w.Whom = topWhom(a, sit)
+	}
+	if _, _, ok := OrderFor(w.Action, orNone(w.Target), w.Whom, sit); !ok {
+		return nil, "unclear-condition", false
+	}
+	return w, "", true
+}
+
+func orNone(p string) string {
+	if p == "" {
+		return interpret.None
+	}
+	return p
 }
 
 // unclear is step 4: with probability Initiative the general acts on his own
@@ -261,8 +357,8 @@ func category(act string, a interpret.Answers, sit Situation) cat {
 	case ActSupport:
 		return aggressive
 	case ActMove:
-		t := topTarget(a, sit.Map)
-		if sit.Map.Province(t) != nil && sit.Owner(t) == sit.Side {
+		t := topTarget(a.Target, sit.Map)
+		if sit.Map.Province(t) != nil && sit.Owner != nil && sit.Owner(t) == sit.Side {
 			return neutral
 		}
 		return aggressive
@@ -270,10 +366,21 @@ func category(act string, a interpret.Answers, sit Situation) cat {
 	return neutral
 }
 
-func topTarget(a interpret.Answers, m *mapdata.Map) string {
+func topTarget(p map[string]float64, m *mapdata.Map) string {
 	order := append(m.IDs(), interpret.None, interpret.Unclear)
-	t, _ := interpret.Top(a.Target, order)
+	t, _ := interpret.Top(p, order)
 	return t
+}
+
+// topWhom is the fellow general the letter most likely names for support.
+func topWhom(a interpret.Answers, sit Situation) string {
+	names := make([]string, 0, len(sit.Friends))
+	for n := range sit.Friends {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	w, _ := interpret.Top(a.Whom, names)
+	return w
 }
 
 // sample picks from a distribution using a uniform draw, walking the keys in

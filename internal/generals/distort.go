@@ -21,6 +21,8 @@ type ReportContext struct {
 	Concerns     []string
 	Refused      *model.Order         // an order he quietly refused this turn
 	Clarify      *report.ClarifyFacts // what he could not make out, if he is asking
+	Watching     string               // the condition he is still watching for, in words
+	WatchFired   string               // what happened when a watch fired this turn, in words
 	// Draw returns a uniform [0,1) number from the reporting stream, for
 	// omissions. Nil means nothing is ever omitted.
 	Draw func() float64
@@ -117,6 +119,7 @@ func Distort(obs engine.Observation, g *model.General, rc ReportContext) (report
 		f.Refused, f.RefusedOrder = true, interpret.DescribeOrder(*rc.Refused, rc.Map)
 	}
 	f.Clarification = rc.Clarify
+	f.Watching, f.WatchFired = rc.Watching, rc.WatchFired
 	return f, omit(&f, obs, tr, rc)
 }
 

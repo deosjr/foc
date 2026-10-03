@@ -263,3 +263,59 @@ func TestFullScenarioPlays(t *testing.T) {
 		}
 	}
 }
+
+func TestWatchFiresTheTurnAfter(t *testing.T) {
+	g, log := newTestGame(t) // PoC scenario: the enemy marches Marren -> Hollow Wood on turn 1
+	g.SetDraft("velk", "Watch Hollow Wood, and strike if they come into the wood.")
+	if err := g.EndTurn(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if w := g.watches["velk"]; w == nil || w.Trigger.Place != "hollow" || w.Action != "move" {
+		t.Fatalf("watch after turn 1 = %+v", g.watches["velk"])
+	}
+	if d := g.DebugTurn("velk", 1); d.Order.Type != "Hold" || d.Facts.Watching == "" {
+		t.Errorf("turn 1: order %v, watching %q", d.Order, d.Facts.Watching)
+	}
+	if err := g.EndTurn(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	d := g.DebugTurn("velk", 2)
+	if d.Order.Type != "MoveToward" || d.Order.Target != "hollow" || d.Facts.WatchFired == "" {
+		t.Errorf("turn 2: order %v, fired %q", d.Order, d.Facts.WatchFired)
+	}
+	if g.watches["velk"] != nil {
+		t.Error("a watch fires once")
+	}
+	if !strings.Contains(string(log.Bytes()), `"kind":"watch-fired"`) {
+		t.Error("firing not logged")
+	}
+}
+
+func TestNewLetterReplacesWatch(t *testing.T) {
+	g, _ := newTestGame(t)
+	g.SetDraft("velk", "Watch Hollow Wood, and strike if they come into the wood.")
+	g.EndTurn(context.Background(), nil)
+	g.SetDraft("velk", "Hold Velia.")
+	if err := g.EndTurn(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if d := g.DebugTurn("velk", 2); d.Order.Type != "Hold" || d.Facts.WatchFired != "" {
+		t.Errorf("the new letter should have cancelled the watch: order %v, fired %q", d.Order, d.Facts.WatchFired)
+	}
+}
+
+func TestWatchOutOfSightIsMentioned(t *testing.T) {
+	g, _ := newTestGame(t)
+	g.SetDraft("velk", "Hold Velia, and march on Sarnos if they appear in Sarnos.")
+	if err := g.EndTurn(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	d := g.DebugTurn("velk", 1)
+	found := false
+	for _, c := range d.Facts.Concerns {
+		found = found || strings.Contains(c, "Sarnos lies beyond what I can see from Velia")
+	}
+	if !found {
+		t.Errorf("concerns %q should say Sarnos is out of sight", d.Facts.Concerns)
+	}
+}

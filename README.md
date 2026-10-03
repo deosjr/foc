@@ -14,6 +14,9 @@ go run ./cmd/foc --open
 ```
 
 With no `config.yaml`, both models are offline mocks: no network, no keys.
+Generals understand moves, holding, digging in, scouting and supporting each
+other, and one condition per letter ("hold the hills, but fall back to Karsa
+if they come in force"), which they act on the turn after they see it happen.
 When the campaign ends, the **after-action review** (`/review`) steps through
 each turn with what you believed beside what was true, and each general's
 private rationale for what he did with your letters.

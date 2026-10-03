@@ -9,6 +9,9 @@
 #   class: ambiguous  several defensible readings, listed in `readings`. Used to
 #                     check the probability split and that Velk and Saris diverge
 #                     in the direction their traits predict.
+#   class: conditional  one condition with an "otherwise": expect.action is
+#                     what to do now, expect.trigger the fair readings of the
+#                     condition, expect.then what to do when it happens.
 #   class: unclear    no instruction can be made out; the general should hold
 #                     (PoC: hold; later: ask for clarification).
 #   class: none       no instruction at all (news, praise, questions); the
@@ -178,15 +181,6 @@ letters:
     letter: Make for the Pass of Ilth and hold it.
     expect: {action: move, target: ilth}
 
-  - id: c22
-    class: clear
-    general: saris
-    location: duna
-    standing: hold
-    letter: Your orders are unchanged. Hold Duna Hills.
-    expect: {action: hold}
-    accept: [entrench]
-
   - id: c23
     class: clear
     general: velk
@@ -297,22 +291,6 @@ letters:
     letter: Protect the road to Karsa.
     readings: [hold, move]
 
-  - id: a08
-    class: ambiguous
-    general: saris
-    location: hollow
-    letter: Hold Hollow Wood if you can, but fall back if they come in force.
-    note: A conditional order; the PoC flattens it to one action.
-    readings: [hold, retreat]
-
-  - id: a09
-    class: ambiguous
-    general: velk
-    location: oros
-    letter: Watch the ford, and strike if they try to cross.
-    note: A conditional order; the PoC flattens it to one action.
-    readings: [hold, move]
-
   - id: a10
     class: ambiguous
     general: saris
@@ -337,6 +315,39 @@ letters:
     letter: I hear Marren is lightly held. It would be a fine prize.
     readings: [move, hold]
     target: marren
+
+  # ---------------------------------------------------------- conditional --
+  - id: k01
+    class: conditional
+    general: saris
+    location: hollow
+    letter: Hold Hollow Wood if you can, but fall back if they come in force.
+    expect: {action: hold, trigger: [outnumbered, attacked], then: retreat}
+    accept: [entrench]
+
+  - id: k02
+    class: conditional
+    general: velk
+    location: velia
+    letter: Watch the ford, and strike if they try to cross.
+    expect: {action: hold, trigger: [enemy_at, attacked], then: move}
+    accept: [entrench, scout]
+
+  - id: k03
+    class: conditional
+    general: velk
+    location: velia
+    letter: If Duna Hills falls, march to Karsa at once.
+    expect: {action: hold, trigger: [place_lost], then: move}
+    accept: [entrench]
+
+  - id: k04
+    class: conditional
+    general: saris
+    location: duna
+    letter: Fall back if they come for you.
+    expect: {action: hold, trigger: [attacked, enemy_at, outnumbered], then: retreat}
+    accept: [entrench]
 
   # -------------------------------------------------------------- unclear --
   - id: u01

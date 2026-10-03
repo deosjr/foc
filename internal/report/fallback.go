@@ -21,6 +21,8 @@ Your orders as I understood them: {{.OrderUnderstood}} ({{.OrderSource}}). This 
 {{- range .Sightings}} {{if eq .Certainty "certain"}}There are {{men .EnemyStrength}} of the enemy in {{.Province}}.{{else}}I judge there are some {{men .EnemyStrength}} of the enemy in {{.Province}}.{{end}}{{end}}
 {{- if .NoEnemySeenIn}} I see no enemy in {{join .NoEnemySeenIn}}.{{end}}
 {{- range .FriendlyContacts}} {{.General}} is in {{.Province}}.{{end}}
+{{- if .WatchFired}} {{.WatchFired}}.{{end}}
+{{- if .Watching}} As you bade me, {{.Watching}}.{{end}}
 {{- if .Refused}} I did not {{.RefusedOrder}}; I judged it would cost us the army.{{end}}
 {{- range .Concerns}} {{.}}{{end}}
 {{- with .Clarification}} I could not make out {{join .Unclear}} from your letter sent turn {{.LetterSentTurn}}, so I hold here until you write again.{{end}}

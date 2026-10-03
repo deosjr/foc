@@ -65,6 +65,8 @@ type TurnDebug struct {
 	Observation     engine.Observation          `json:"observation"`
 	Facts           report.ReportFacts          `json:"facts"`
 	Omitted         []string                    `json:"omitted,omitempty"`
+	Watching        string                      `json:"watching,omitempty"`
+	WatchFired      string                      `json:"watch_fired,omitempty"`
 	Written         report.Written              `json:"written"`
 }
 
@@ -99,8 +101,10 @@ type Game struct {
 	standingSource map[string]string
 	gone           map[string]bool // generals whose army has been destroyed (truth)
 	debug          map[string]*TurnDebug
-	snapshots      []Snapshot                // end of each turn; index 0 is the start
-	seen           map[string]map[string]int // general id -> province -> enemy strength he last saw
+	snapshots      []Snapshot                     // end of each turn; index 0 is the start
+	seen           map[string]map[string]int      // general id -> province -> enemy strength he last saw
+	watches        map[string]*model.Contingency  // general id -> the "if X, then Y" he is watching for
+	lastObs        map[string]*engine.Observation // general id -> what he saw at the end of the last turn
 }
 
 // Snapshot is belief and truth as they stood at the end of a turn.
@@ -187,6 +191,8 @@ func New(o Options) (*Game, error) {
 		gone:           map[string]bool{},
 		debug:          map[string]*TurnDebug{},
 		seen:           map[string]map[string]int{},
+		watches:        map[string]*model.Contingency{},
+		lastObs:        map[string]*engine.Observation{},
 	}
 	var names []string
 	for _, a := range scn.Armies {
@@ -348,11 +354,15 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 		in := interps[i]
 		gen := g.generals[l.To]
 		// Always three draws per letter, in this order, whichever step decides.
-		dr := generals.Draws{Sample: g.rngInterp.Float64(), Initiative: g.rngInterp.Float64(), Refuse: g.rngInterp.Float64()}
-		in.RNGDraw, in.Initiative, in.RefuseDraw = dr.Sample, dr.Initiative, dr.Refuse
+		dr := generals.Draws{Sample: g.rngInterp.Float64(), Initiative: g.rngInterp.Float64(),
+			Refuse: g.rngInterp.Float64(), Then: g.rngInterp.Float64()}
+		in.RNGDraw, in.Initiative, in.RefuseDraw, in.ThenDraw = dr.Sample, dr.Initiative, dr.Refuse, dr.Then
 		if in.Error == "" {
 			d := generals.Interpret(in.Parsed, gen.Traits, g.situation(l.To), g.cfg.Interpretation.Thresholds, g.questions.ActionOptions(), dr)
-			in.Outcome, in.Step, in.Order, in.Refused = d.Outcome, d.Step, d.Order, d.Refused
+			in.Outcome, in.Step, in.Order, in.Refused, in.Watch = d.Outcome, d.Step, d.Order, d.Refused, d.Watch
+			if in.Watch != nil {
+				in.Watch.SetTurn, in.Watch.LetterID = T, l.ID
+			}
 			in.Weights, in.Reweighted = d.Weights, d.Reweighted
 		} else {
 			// The general could not make sense of the letter at all.
@@ -369,6 +379,14 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 			orders[l.To], sources[l.To] = *in.Order, source
 			effective[l.To], refused[l.To], clarify[l.To] = nil, nil, nil
 		}
+		if in.Outcome == generals.OutcomeOrder || in.Outcome == generals.OutcomeRefuse {
+			// A new order replaces any earlier watch, with its own or none.
+			if in.Watch != nil {
+				g.watches[l.To] = in.Watch
+			} else {
+				delete(g.watches, l.To)
+			}
+		}
 		switch in.Outcome {
 		case generals.OutcomeOrder:
 			if strings.HasPrefix(in.Step, "own-judgement") {
@@ -380,6 +398,7 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 			what := map[string]string{
 				"no-target":         "where you would have me go",
 				"no-support-target": "whom you would have me support",
+				"unclear-condition": "what you would have me watch for, or do if it came to pass",
 			}[in.Step]
 			if what == "" {
 				what = "what you would have me do"
@@ -387,6 +406,17 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 			clarify[l.To] = &report.ClarifyFacts{LetterSentTurn: l.SentTurn, YourLetter: l.Body, Unclear: []string{what}}
 		case generals.OutcomeRefuse:
 			refused[l.To] = in.Refused
+		}
+		// A watch on a place he cannot see may never fire; he says so.
+		if w := in.Watch; w != nil && w.Trigger.Place != "" && (in.Outcome == generals.OutcomeOrder || in.Outcome == generals.OutcomeRefuse) {
+			loc := g.state.Armies[gen.ArmyID].Location
+			if w.Trigger.Place != loc && !g.Map.Adjacent(loc, w.Trigger.Place) {
+				effective[l.To] = append(effective[l.To], fmt.Sprintf(
+					"%s lies beyond what I can see from %s; unless I move closer, I may not learn if %s.",
+					g.Map.NameOf(w.Trigger.Place), g.Map.NameOf(loc), generals.DescribeTrigger(w.Trigger, g.Map)))
+			}
+		}
+		switch in.Outcome {
 		case generals.OutcomeDoubted:
 			before := gen.Traits.Loyalty
 			gen.Traits.Loyalty = math.Max(0, gen.Traits.Loyalty-0.1)
@@ -396,8 +426,9 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 		}
 	}
 
-	// 4. Standing orders for generals with no new order.
+	// 4. Standing orders for generals with no new order, and watches that fire.
 	g.log.SetPhase(T, "standing")
+	fired := map[string]string{}
 	var all []model.Order
 	active := []string{}
 	for _, gid := range g.generalOrder {
@@ -409,6 +440,23 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 		if _, ok := orders[gid]; !ok {
 			orders[gid] = g.state.Standing[gid]
 			sources[gid] = g.standingSource[gid]
+		}
+		// A watch fires on what he saw at the end of the last turn.
+		if w := g.watches[gid]; w != nil && generals.Fires(w.Trigger, g.lastObs[gid]) {
+			o, _, ok := generals.OrderFor(w.Action, w.Target, w.Whom, g.situation(gid))
+			if !ok {
+				o = model.Order{ArmyID: gen.ArmyID, Type: model.Hold}
+			}
+			sent := 0
+			if l := g.DebugLetter(w.LetterID); l != nil {
+				sent = l.SentTurn
+			}
+			orders[gid] = o
+			sources[gid] = fmt.Sprintf("your letter sent turn %d: %s", sent, generals.DescribeWatch(w, g.Map))
+			fired[gid] = fmt.Sprintf("%s, so as your letter sent turn %d bade me, I turned to %s",
+				capitalise(generals.DescribeTrigger(w.Trigger, g.Map)), sent, interpret.DescribeOrder(o, g.Map, g.armyNames()))
+			g.log.Add("watch-fired", map[string]any{"general": gid, "watch": w, "order": o})
+			delete(g.watches, gid)
 		}
 		all = append(all, orders[gid])
 		g.log.Add("order", map[string]any{"general": gid, "order": orders[gid], "source": sources[gid]})
@@ -454,6 +502,8 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 		gen := g.generals[gid]
 		o := g.eng.Perceive(g.state, res, gid, gen.ArmyID, g.rngPerception)
 		obs[gid] = o
+		oc := o
+		g.lastObs[gid] = &oc
 		g.log.Add("observation", o)
 		if o.Disbanded {
 			g.gone[gid] = true
@@ -474,6 +524,7 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 			Map: g.Map, Rules: g.Rules, GeneralNames: names, ArmyNames: g.armyNames(),
 			OrderSource: sources[gid], Concerns: append(append([]string{}, doubts[gid]...), effective[gid]...),
 			Refused: refused[gid], Clarify: clarify[gid], Draw: g.rngReporting.Float64,
+			Watching: g.watching(gid), WatchFired: fired[gid],
 		})
 		facts[gid], omitted[gid] = f, om
 		g.log.Add("report-facts", map[string]any{"general": gid, "facts": f, "omitted": om})
@@ -544,6 +595,7 @@ func (g *Game) EndTurn(ctx context.Context, progress func(string)) error {
 		g.debug[debugKey(gid, T)] = &TurnDebug{
 			Turn: T, GeneralID: gid, Interpretations: byGeneral[gid],
 			Order: orders[gid], OrderSource: sources[gid], Observation: obs[gid], Facts: f, Omitted: omitted[gid], Written: w,
+			Watching: f.Watching, WatchFired: f.WatchFired,
 		}
 	}
 
@@ -623,6 +675,21 @@ func newEnemy(scn *mapdata.Scenario, m *mapdata.Map) enemy.AI {
 		return &enemy.Heuristic{Map: m}
 	}
 	return enemy.NewScripted(scn.EnemyRoutes)
+}
+
+// watching describes the watch a general keeps, or "".
+func (g *Game) watching(gid string) string {
+	if w := g.watches[gid]; w != nil {
+		return generals.DescribeWatch(w, g.Map)
+	}
+	return ""
+}
+
+func capitalise(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 // armyNames maps army ids to their generals' names.

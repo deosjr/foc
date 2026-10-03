@@ -343,3 +343,82 @@ func TestNewOrders(t *testing.T) {
 		})
 	}
 }
+
+func TestFires(t *testing.T) {
+	obs := &engine.Observation{Start: "velia", Location: "velia", Strength: 20,
+		Sightings: []engine.Sighting{{Province: "oros", Strength: 15}, {Province: "hollow", Strength: 10}}}
+	cases := []struct {
+		tr   model.Trigger
+		want bool
+	}{
+		{model.Trigger{Kind: model.EnemyAt, Place: "oros"}, true},
+		{model.Trigger{Kind: model.EnemyAt, Place: "marren"}, false}, // out of sight: never
+		{model.Trigger{Kind: model.EnemyAt}, true},
+		{model.Trigger{Kind: model.Outnumbered}, true}, // 25 seen against 20
+		{model.Trigger{Kind: model.Attacked}, false},
+		{model.Trigger{Kind: model.PlaceLost, Place: "hollow"}, true},
+		{model.Trigger{Kind: model.PlaceLost}, false}, // he still holds Velia
+	}
+	for _, c := range cases {
+		if got := Fires(c.tr, obs); got != c.want {
+			t.Errorf("%+v: fires=%v, want %v", c.tr, got, c.want)
+		}
+	}
+	attacked := &engine.Observation{Start: "velia", Location: "velia", Strength: 20,
+		Battles: []engine.ObservedBattle{{Place: "velia", Result: "won"}}}
+	if !Fires(model.Trigger{Kind: model.Attacked}, attacked) {
+		t.Error("defending at home should count as attacked")
+	}
+	attacking := &engine.Observation{Start: "velia", Location: "velia", Strength: 20,
+		Battles: []engine.ObservedBattle{{Place: "hollow", Result: "lost"}}}
+	if Fires(model.Trigger{Kind: model.Attacked}, attacking) {
+		t.Error("his own failed attack is not being attacked")
+	}
+	if Fires(model.Trigger{Kind: model.EnemyAt}, nil) {
+		t.Error("no observation yet must not fire")
+	}
+}
+
+func TestConditionalLetter(t *testing.T) {
+	m := loadMap(t)
+	full := []string{"hold", "move", "support", "entrench", "scout", "retreat", "unclear"}
+	// "Watch the ford, and strike if they try to cross."
+	a := interpret.Answers{Plausible: 0.9, Addressed: 0.9, Engagement: 0.7,
+		Action: map[string]float64{"hold": 0.9, "move": 0.1}, Target: map[string]float64{"oros": 1},
+		Conditional: 0.9, Trigger: map[string]float64{"enemy_at": 0.9, "none": 0.1},
+		TriggerPlace: map[string]float64{"oros": 1},
+		ThenAction:   map[string]float64{"move": 0.9, "hold": 0.1}, ThenTarget: map[string]float64{"oros": 1}}
+	d := Interpret(a, velk, sit(m, "velia"), th, full, Draws{Initiative: 1, Refuse: 1})
+	if d.Order == nil || d.Order.Type != model.Hold || d.Watch == nil {
+		t.Fatalf("got %s/%s order %v watch %v", d.Outcome, d.Step, d.Order, d.Watch)
+	}
+	if d.Watch.Trigger != (model.Trigger{Kind: model.EnemyAt, Place: "oros"}) || d.Watch.Action != "move" || d.Watch.Target != "oros" {
+		t.Errorf("watch = %+v", d.Watch)
+	}
+	if got := DescribeWatch(d.Watch, m); got != "if the enemy is seen at Oros Ford, march toward Oros Ford" {
+		t.Errorf("described as %q", got)
+	}
+	// A condition that cannot be made out means asking for clarification.
+	a.Trigger = map[string]float64{"unclear": 1}
+	if d := Interpret(a, velk, sit(m, "velia"), th, full, Draws{Initiative: 1, Refuse: 1}); d.Outcome != OutcomeClarify || d.Step != "unclear-condition" {
+		t.Errorf("unclear condition: got %s/%s", d.Outcome, d.Step)
+	}
+	// No condition: no watch.
+	a.Conditional = 0.1
+	if d := Interpret(a, velk, sit(m, "velia"), th, full, Draws{Initiative: 1, Refuse: 1}); d.Watch != nil {
+		t.Errorf("unconditional letter got a watch %+v", d.Watch)
+	}
+}
+
+func TestWatchStrikesWhereTheConditionIs(t *testing.T) {
+	m := loadMap(t)
+	full := []string{"hold", "move", "support", "entrench", "scout", "retreat", "unclear"}
+	a := interpret.Answers{Plausible: 0.9, Addressed: 0.9, Engagement: 0.7,
+		Action: map[string]float64{"hold": 0.9}, Target: map[string]float64{"none": 1},
+		Conditional: 0.9, Trigger: map[string]float64{"enemy_at": 1}, TriggerPlace: map[string]float64{"oros": 1},
+		ThenAction: map[string]float64{"move": 0.9, "hold": 0.1}, ThenTarget: map[string]float64{"none": 1}}
+	d := Interpret(a, velk, sit(m, "velia"), th, full, Draws{Initiative: 1, Refuse: 1})
+	if d.Watch == nil || d.Watch.Target != "oros" {
+		t.Errorf("strike with no place should aim at the condition's place: %+v (%s)", d.Watch, d.Step)
+	}
+}

@@ -99,3 +99,33 @@ type Letter struct {
 	Route       []string   `json:"route"`
 	Intercepted bool       `json:"intercepted"` // truth only; never shown during play
 }
+
+// TriggerKind is what a conditional order waits for.
+type TriggerKind string
+
+const (
+	EnemyAt     TriggerKind = "enemy_at"    // enemy seen in a place (or anywhere near, with no place)
+	Attacked    TriggerKind = "attacked"    // the general's army was attacked or met the enemy in the field
+	Outnumbered TriggerKind = "outnumbered" // more enemy seen nearby than he has men
+	PlaceLost   TriggerKind = "place_lost"  // he knows a place has fallen to the enemy
+)
+
+// Trigger is a condition a general watches for, judged only from what he
+// himself has seen.
+type Trigger struct {
+	Kind  TriggerKind `json:"kind"`
+	Place string      `json:"place,omitempty"` // province id; "" means "near me" / "where I stand"
+}
+
+// Contingency is the "if X, then Y" half of a conditional order. It fires
+// once, the turn after the general sees the condition met, and is replaced
+// by any new letter that gives an order. The "then" order is rebuilt from
+// Action/Target/Whom when it fires, from wherever the general is by then.
+type Contingency struct {
+	Trigger  Trigger `json:"trigger"`
+	Action   string  `json:"action"`           // hold | move | support | entrench | scout | retreat
+	Target   string  `json:"target,omitempty"` // province id
+	Whom     string  `json:"whom,omitempty"`   // name of the general to support
+	SetTurn  int     `json:"set_turn"`
+	LetterID string  `json:"letter"`
+}

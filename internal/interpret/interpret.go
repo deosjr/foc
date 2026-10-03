@@ -211,6 +211,13 @@ type Answers struct {
 	Action     map[string]float64 `json:"action"`
 	Target     map[string]float64 `json:"target"`                 // province id, "none" or "unclear"
 	Whom       map[string]float64 `json:"support_whom,omitempty"` // general name, "none" or "unclear"
+
+	// The conditional half, if the question set asks for it.
+	Conditional  float64            `json:"conditional"`
+	Trigger      map[string]float64 `json:"trigger,omitempty"`
+	TriggerPlace map[string]float64 `json:"trigger_place,omitempty"` // province id, "none" or "unclear"
+	ThenAction   map[string]float64 `json:"then_action,omitempty"`
+	ThenTarget   map[string]float64 `json:"then_target,omitempty"` // province id, "none" or "unclear"
 }
 
 // Parse validates a response against the questions. A missing answer is an
@@ -243,6 +250,20 @@ func Parse(resp decision.Response, qs []decision.Question, m *mapdata.Map) (Answ
 				}
 			case "support_whom":
 				out.Whom = probs
+			case "trigger":
+				out.Trigger = probs
+			case "then_action":
+				out.ThenAction = probs
+			case "trigger_place", "then_target":
+				ids := map[string]float64{}
+				for name, p := range probs {
+					ids[provinceID(name, m)] += p
+				}
+				if q.ID == "trigger_place" {
+					out.TriggerPlace = ids
+				} else {
+					out.ThenTarget = ids
+				}
 			}
 		case decision.KindScore:
 			if math.IsNaN(a.Score) {
@@ -256,8 +277,11 @@ func Parse(resp decision.Response, qs []decision.Question, m *mapdata.Map) (Answ
 				out.Engagement = v
 			}
 		case decision.KindBinary:
-			if q.ID == "addressed" {
+			switch q.ID {
+			case "addressed":
 				out.Addressed = clamp01(a.PYes)
+			case "conditional":
+				out.Conditional = clamp01(a.PYes)
 			}
 		}
 	}
@@ -348,10 +372,12 @@ type Interpretation struct {
 	RNGDraw    float64            `json:"rng_draw"`        // step 5 sample
 	Initiative float64            `json:"initiative_draw"` // step 4: own judgement or ask
 	RefuseDraw float64            `json:"refuse_draw"`     // step 8
+	ThenDraw   float64            `json:"then_draw"`       // an ambiguous "then" action
 	Outcome    string             `json:"outcome"`         // order | clarify | refuse | ignored | doubted
 	Step       string             `json:"step"`
 	Order      *model.Order       `json:"order,omitempty"`
 	Refused    *model.Order       `json:"refused,omitempty"`
+	Watch      *model.Contingency `json:"watch,omitempty"` // the conditional half, if any
 	Rationale  string             `json:"rationale,omitempty"`
 	Error      string             `json:"error,omitempty"`
 }

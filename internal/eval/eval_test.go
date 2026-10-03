@@ -32,7 +32,7 @@ func TestEvalRunsOnShippedLetters(t *testing.T) {
 	if sum.Errors != 0 {
 		t.Errorf("%d errors", sum.Errors)
 	}
-	if sum.Clear+sum.Ambiguous+sum.Unclear+sum.None != len(letters) {
+	if sum.Clear+sum.Ambiguous+sum.Conditional+sum.Unclear+sum.None != len(letters) {
 		t.Errorf("summary does not cover every letter: %+v", sum)
 	}
 	var buf bytes.Buffer
